@@ -42,9 +42,15 @@ func New(client *http.Client, cachePath string, logger zerolog.Logger) (*Client,
 		return nil, fmt.Errorf("unable to initialize file cache: %w", err)
 	}
 
+	// Ensure the db logger is not too chatty
+	dbLogger := logger.With().Str("component", "database").Logger()
+	if dbLogger.GetLevel() < zerolog.InfoLevel {
+		dbLogger = dbLogger.Level(zerolog.InfoLevel)
+	}
+
 	db, err := database.NewDatabase[[]cachedResponse](
 		path.Join(cachePath, "db"),
-		logger.With().Str("component", "database").Logger(),
+		dbLogger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize database: %w", err)
@@ -95,7 +101,7 @@ func (c *Client) serveFromCache(
 			}
 
 			c.logger.Debug().Stringer("url", req.URL).Msg("serving response from cache")
-			resp.Headers.Add("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
+			resp.Headers.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 			return &http.Response{
 				Body:       body,
 				Header:     resp.Headers,
@@ -130,6 +136,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	timeAtResponseReceived := time.Now().UTC()
 
 	if !httpcaching.IsCacheable(resp) {
+		c.logger.Debug().Stringer("url", req.URL).Msg("request is not cacheable")
 		return resp, nil
 	}
 
@@ -162,6 +169,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 				Stringer("url", req.URL).
 				Err(err).
 				Msg("Error saving entry in the database")
+		} else {
+			c.logger.Debug().Stringer("url", req.URL).Msg("request saved in the database")
 		}
 	})
 	resp.Body = ingestor

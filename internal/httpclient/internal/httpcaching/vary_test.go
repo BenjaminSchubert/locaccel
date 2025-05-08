@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func TestNormalizeVaryHeaders(t *testing.T) {
@@ -55,7 +55,7 @@ func TestMatchVaryHeaders(t *testing.T) {
 		{"vary-matching", http.Header{"Foo": []string{"one"}, "Bar": []string{"two"}}, http.Header{"Foo": []string{"one"}, "Baz": nil}, true},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
-			match := MatchVaryHeaders(tc.reqHeaders, tc.varyHeaders, logging.TestLogger(t))
+			match := MatchVaryHeaders(tc.reqHeaders, tc.varyHeaders, testutils.TestLogger(t))
 			require.Equal(t, tc.expected, match)
 		})
 	}

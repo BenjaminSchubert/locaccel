@@ -13,3 +13,15 @@ formatters:
         - localmodule
     gofumpt:
       extra-rules: true
+
+linters:
+  enable:
+    - depguard
+    - unused
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "github.com/rs/zerolog/log"
+              desc: use an explicit logger

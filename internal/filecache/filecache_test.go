@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/filecache"
-	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 var errTest = errors.New("testerror")
@@ -22,7 +22,7 @@ const testData = "1234567890"
 func TestCanIngestAndRecover(t *testing.T) {
 	t.Parallel()
 
-	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 
 	computedHash := ""
@@ -56,7 +56,7 @@ func TestCanIngestAndRecover(t *testing.T) {
 func TestHandlesConcurrentWrites(t *testing.T) {
 	t.Parallel()
 
-	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 
 	hash1 := ""
@@ -90,7 +90,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 
 	cacheDir := t.TempDir()
 
-	cache, err := filecache.NewFileCache(cacheDir, logging.TestLogger(t))
+	cache, err := filecache.NewFileCache(cacheDir, testutils.TestLogger(t))
 	require.NoError(t, err)
 
 	reader := cache.SetupIngestion(
@@ -107,7 +107,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
-	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 
 	fp, err := cache.Open("nonexistent")

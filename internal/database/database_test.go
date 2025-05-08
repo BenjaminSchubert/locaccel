@@ -7,13 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/database"
-	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func TestRetrieveNotFound(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), logging.TestLogger(t))
+	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -25,7 +25,7 @@ func TestRetrieveNotFound(t *testing.T) {
 func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), logging.TestLogger(t))
+	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -41,7 +41,7 @@ func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), logging.TestLogger(t))
+	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 

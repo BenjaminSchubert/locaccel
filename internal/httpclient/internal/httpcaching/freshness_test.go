@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func TestGetFreshness(t *testing.T) {
@@ -59,7 +59,7 @@ func TestGetFreshness(t *testing.T) {
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
-			freshness := getFreshnessLifetime(tc.headers, logging.TestLogger(t))
+			freshness := getFreshnessLifetime(tc.headers, testutils.TestLogger(t))
 			require.Equal(t, time.Second*time.Duration(tc.expected), freshness)
 		})
 	}
@@ -73,7 +73,7 @@ func TestGetCurrentAge(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		logging.TestLogger(t),
+		testutils.TestLogger(t),
 	)
 	require.Equal(t, time.Second*time.Duration(120), age)
 }
@@ -89,7 +89,7 @@ func TestIsFresh(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		logging.TestLogger(t),
+		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.Equal(t, true, isFresh)
@@ -106,7 +106,7 @@ func TestIsNotFresh(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		logging.TestLogger(t),
+		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.Equal(t, false, isFresh)

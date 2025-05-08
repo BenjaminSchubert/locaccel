@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func getAllEntriesInDB(
@@ -113,7 +114,7 @@ func setup(t *testing.T) (*Client, func(map[string][]cachedResponse)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
-	logger := logging.TestLogger(t)
+	logger := testutils.TestLogger(t)
 
 	client, err := New(&http.Client{}, cachePath, logger)
 	require.NoError(t, err)
