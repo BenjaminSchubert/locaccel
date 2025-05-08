@@ -1,0 +1,117 @@
+package filecache_test
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"io/fs"
+	"testing"
+	"testing/iotest"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/benjaminschubert/locaccel/internal/filecache"
+	"github.com/benjaminschubert/locaccel/internal/logging"
+)
+
+var errTest = errors.New("testerror")
+
+const testData = "1234567890"
+
+func TestCanIngestAndRecover(t *testing.T) {
+	t.Parallel()
+
+	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	require.NoError(t, err)
+
+	computedHash := ""
+
+	reader := cache.SetupIngestion(
+		io.NopCloser(bytes.NewBufferString(testData)),
+		func(hash string) { computedHash = hash },
+	)
+
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, testData, string(data))
+
+	err = reader.Close()
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		"d12e417e04494572b561ba2c12c3d7f9e5107c4747e27b9a8a54f8480c63e841",
+		computedHash,
+	)
+
+	fp, err := cache.Open(computedHash)
+	require.NoError(t, err)
+
+	result, err := io.ReadAll(fp)
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte("1234567890"), result)
+}
+
+func TestHandlesConcurrentWrites(t *testing.T) {
+	t.Parallel()
+
+	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	require.NoError(t, err)
+
+	hash1 := ""
+	hash2 := ""
+
+	reader1 := cache.SetupIngestion(
+		io.NopCloser(bytes.NewBufferString(testData)),
+		func(hash string) { hash1 = hash },
+	)
+	reader2 := cache.SetupIngestion(
+		io.NopCloser(bytes.NewBufferString(testData)),
+		func(hash string) { hash2 = hash },
+	)
+
+	data, err := io.ReadAll(reader1)
+	require.NoError(t, err)
+	assert.Equal(t, testData, string(data))
+
+	data, err = io.ReadAll(reader2)
+	require.NoError(t, err)
+	assert.Equal(t, testData, string(data))
+
+	require.NoError(t, reader1.Close())
+	require.NoError(t, reader2.Close())
+
+	assert.Equal(t, hash1, hash2)
+}
+
+func TestHandlesErrorsWhileWriting(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+
+	cache, err := filecache.NewFileCache(cacheDir, logging.TestLogger(t))
+	require.NoError(t, err)
+
+	reader := cache.SetupIngestion(
+		io.NopCloser(iotest.ErrReader(errTest)),
+		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+	)
+
+	_, err = io.ReadAll(reader)
+	require.ErrorIs(t, err, errTest)
+
+	require.NoError(t, reader.Close())
+}
+
+func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
+	t.Parallel()
+
+	cache, err := filecache.NewFileCache(t.TempDir(), logging.TestLogger(t))
+	require.NoError(t, err)
+
+	fp, err := cache.Open("nonexistent")
+	require.ErrorIs(t, err, filecache.ErrCannotOpen)
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	require.Nil(t, fp)
+}

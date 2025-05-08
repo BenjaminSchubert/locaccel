@@ -1,0 +1,37 @@
+package httpcaching_test
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
+)
+
+func TestResponseIsCacheable(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		description string
+		StatusCode  int
+		headers     http.Header
+		expected    bool
+	}{
+		{"invalid-status-code", http.StatusNotFound, nil, false},
+		{"invalid-cache-control-header", http.StatusOK, http.Header{"Cache-Control": []string{"max-age=hello"}}, false},
+		{"no-store", http.StatusOK, http.Header{"Cache-Control": []string{"no-store"}}, false},
+		{"private", http.StatusOK, http.Header{"Cache-Control": []string{"private"}}, false},
+		{"authenticated-no-cache-control", http.StatusOK, http.Header{"Authorization": []string{}}, false},
+		{"authenticated-public", http.StatusOK, http.Header{"Authorization": []string{""}, "Cache-Control": []string{"public"}}, true},
+		{"expires", http.StatusOK, http.Header{"Expires": []string{"123"}}, true},
+		{"no-information", http.StatusOK, nil, false},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+
+			resp := http.Response{StatusCode: tc.StatusCode, Header: tc.headers}
+			assert.Equal(t, tc.expected, httpcaching.IsCacheable(&resp))
+		})
+	}
+}
