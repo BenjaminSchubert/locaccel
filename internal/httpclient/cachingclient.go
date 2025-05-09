@@ -67,37 +67,55 @@ func buildKey(req *http.Request) string {
 	return req.Method + "+" + req.URL.String()
 }
 
-func (c *Client) serveFromCache(
-	req *http.Request,
-	cacheKey string,
-) (*http.Response, *database.Entry[[]cachedResponse], error) {
-	dbEntry, err := c.db.Get(cacheKey)
-	if err != nil {
-		return nil, nil, err
-	}
+func (c *Client) selectResponseCandidates(req *http.Request, dbEntry *database.Entry[[]cachedResponse]) []cachedResponse {
+	candidates := []cachedResponse{}
 
 	for _, resp := range dbEntry.Value {
 		if httpcaching.MatchVaryHeaders(req.Header, resp.VaryHeaders, c.logger) {
-			// FIXME: we should not take any response, we should see if one is more prefered
-			//		  See https://datatracker.ietf.org/doc/html/rfc9111#section-4.1
+			candidates = append(candidates, resp)
+		}
+	}
 
-			age, isFresh := httpcaching.IsFresh(
-				resp.Headers,
-				resp.TimeAtRequestCreated,
-				resp.TimeAtResponseReceived,
-				c.logger,
-			)
-			if !isFresh {
-				// FIXME: implement re-validation
-				c.logger.Warn().
-					Stringer("url", req.URL).
-					Msg("can't use cached response as it is stale")
-				continue
-			}
+	return candidates
+}
+
+func (c *Client) selectMostRecentCandidates(candidates []cachedResponse) []cachedResponse {
+	mostRecentCandidates := make([]cachedResponse, 0, 1)
+	maxDate := time.Time{}
+
+	for _, candidate := range candidates {
+		date, err := http.ParseTime(candidate.Headers.Get("Date"))
+		if err != nil {
+			c.logger.Error().
+				Err(err).
+				Msg("BUG: Date header is in an invalid format, which should not happen")
+			date = time.Time{}
+		}
+		if date.After(maxDate) {
+			mostRecentCandidates = mostRecentCandidates[:0]
+			mostRecentCandidates = append(mostRecentCandidates, candidate)
+			maxDate = date
+		} else if date == maxDate {
+			mostRecentCandidates = append(mostRecentCandidates, candidate)
+		}
+	}
+
+	return mostRecentCandidates
+}
+
+func (c *Client) serveFromCachedCandidates(req *http.Request, candidates []cachedResponse) *http.Response {
+	// FIXME: most recent is not necessarily most prefered,
+	//	      we might want to implement proper preferences
+	//		  See https://datatracker.ietf.org/doc/html/rfc9111#section-4.1
+	mostRecentCandidates := c.selectMostRecentCandidates(candidates)
+
+	for _, resp := range mostRecentCandidates {
+		age, isFresh := httpcaching.IsFresh(resp.Headers, resp.TimeAtRequestCreated, resp.TimeAtResponseReceived, c.logger)
+		if isFresh {
 			body, err := c.cache.Open(resp.ContentHash)
 			if err != nil {
-				// FIXME: is it possible that there would be an other matching the headers?
-				return nil, dbEntry, err
+				// FIXME: delete entry, it's useless now
+				continue
 			}
 
 			c.logger.Debug().Stringer("url", req.URL).Msg("serving response from cache")
@@ -106,12 +124,36 @@ func (c *Client) serveFromCache(
 				Body:       body,
 				Header:     resp.Headers,
 				StatusCode: resp.StatusCode,
-			}, dbEntry, nil
+			}
 		}
 	}
 
-	// FIXME: Validate the query(ies) instead of just giving up
-	return nil, dbEntry, errNoMatchVaryHeaders
+	return nil
+}
+
+func (c *Client) serveFromCache(
+	req *http.Request,
+	cacheKey string,
+) (*http.Response, *database.Entry[[]cachedResponse], error) {
+	dbEntry, err := c.db.Get(cacheKey)
+	if err != nil {
+		// No entry cached yet
+		return nil, nil, err
+	}
+
+	candidates := c.selectResponseCandidates(req, dbEntry)
+	if len(candidates) == 0 {
+		// No candidate can be used
+		return nil, dbEntry, errNoMatchVaryHeaders
+	}
+
+	resp := c.serveFromCachedCandidates(req, candidates)
+	if resp != nil {
+		return resp, dbEntry, nil
+	}
+
+	// All responses are stale, we need to revalidate
+	return nil, nil, nil
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {

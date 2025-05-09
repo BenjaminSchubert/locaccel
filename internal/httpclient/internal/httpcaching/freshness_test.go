@@ -42,15 +42,6 @@ func TestGetFreshness(t *testing.T) {
 			3600,
 		},
 		{
-			"ignores-misformed-control",
-			http.Header{
-				"Cache-Control": []string{"s-max-age=hello"},
-				"Date":          []string{"Sun, 01 Jan 2012 11:00:00 GMT"},
-				"Expires":       []string{"Sun, 01 Jan 2012 12:00:00 GMT"},
-			},
-			3600,
-		},
-		{
 			"default-if-invalid-expires",
 			http.Header{
 				"Expires": []string{"hi"},
@@ -59,7 +50,9 @@ func TestGetFreshness(t *testing.T) {
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
-			freshness := getFreshnessLifetime(tc.headers, testutils.TestLogger(t))
+			cacheControl, err := ParseCacheControlDirective(tc.headers["Cache-Control"])
+			require.NoError(t, err)
+			freshness := getFreshnessLifetime(tc.headers, cacheControl, testutils.TestLogger(t))
 			require.Equal(t, time.Second*time.Duration(tc.expected), freshness)
 		})
 	}

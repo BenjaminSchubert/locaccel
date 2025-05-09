@@ -11,18 +11,13 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func getFreshnessLifetime(headers http.Header, logger zerolog.Logger) time.Duration {
+func getFreshnessLifetime(headers http.Header, cacheControl CacheControlResponseDirective, logger zerolog.Logger) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.1
-	cacheControl, err := ParseCacheControlDirective(headers.Values("cache-control"))
-	if err != nil {
-		logger.Warn().Err(err).Msg("unable to parse cache control directives")
-	} else {
-		if cacheControl.SMaxAge != 0 {
-			return cacheControl.SMaxAge
-		}
-		if cacheControl.MaxAge != 0 {
-			return cacheControl.MaxAge
-		}
+	if cacheControl.SMaxAge != 0 {
+		return cacheControl.SMaxAge
+	}
+	if cacheControl.MaxAge != 0 {
+		return cacheControl.MaxAge
 	}
 
 	if expires := headers.Get("Expires"); expires != "" {
@@ -90,6 +85,11 @@ func IsFresh(
 	logger zerolog.Logger,
 ) (time.Duration, bool) {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2
+	cacheControl, err := ParseCacheControlDirective(headers.Values("cache-control"))
+	if err != nil {
+		logger.Warn().Err(err).Msg("unable to parse cache control directives")
+	}
 	age := getCurrentAge(headers, requestTime, responseTime, logger)
-	return age, getFreshnessLifetime(headers, logger) > age
+
+	return age, cacheControl.NoCache || cacheControl.MustRevalidate || getFreshnessLifetime(headers, cacheControl, logger) > age
 }
