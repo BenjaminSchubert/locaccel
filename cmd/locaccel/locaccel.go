@@ -26,12 +26,18 @@ func createServer(
 	handler := http.NewServeMux()
 
 	oci.RegisterHandler("https://registry-1.docker.io", handler, client)
+
+	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
+		logger.Warn().Msg("Profiling enabled under /-/pprof/")
+		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
+	}
+
 	handler.HandleFunc("/", handlers.NotImplemented)
 
 	return &http.Server{
 		Addr:         conf.Address,
 		Handler:      middleware.ApplyAllMiddlewares(handler, logger),
-		ReadTimeout:  5 * time.Minute,
+		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 5 * time.Minute,
 	}
 }
@@ -70,7 +76,7 @@ func main() {
 	}
 
 	client := &http.Client{
-		Timeout: time.Minute,
+		Timeout: 5 * time.Minute,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,

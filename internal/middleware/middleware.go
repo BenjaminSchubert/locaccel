@@ -53,6 +53,7 @@ func newTraceMiddleware(next http.Handler, logger zerolog.Logger) http.Handler {
 	return http.HandlerFunc(func(respw http.ResponseWriter, req *http.Request) {
 		// FIXME: can we avoid using Any for performance?
 		hlog.FromRequest(req).Trace().
+			// FIXME: drop authorization header
 			Any("headers", req.Header).
 			Str("method", req.Method).
 			Stringer("url", redactedURL{req.URL}).

@@ -5,7 +5,7 @@ GOLANGCI_LINT_VERSION = 2.1.6
 all: build lint test
 
 build:
-	go build -o build/locaccel ./cmd/locaccel
+	go build -trimpath -o build/locaccel ./cmd/locaccel
 
 lint: .cache/bin/golangci-lint
 	go mod tidy -diff
