@@ -157,6 +157,8 @@ func (c *Client) serveFromCache(
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	removeHopByHopHeaders(req.Header)
+
 	// We only support caching GET requests
 	if req.Method != http.MethodGet {
 		return c.client.Do(req)
@@ -177,6 +179,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	timeAtResponseReceived := time.Now().UTC()
 
+	removeHopByHopHeaders(resp.Header)
+
 	if !httpcaching.IsCacheable(resp) {
 		c.logger.Debug().Stringer("url", req.URL).Msg("request is not cacheable")
 		return resp, nil
@@ -193,7 +197,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		cacheResp := cachedResponse{
 			hash,
 			resp.StatusCode,
-			httpcaching.FilterUncacheableHeaders(resp),
+			resp.Header,
 			httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
 			timeAtRequestCreated,
 			timeAtResponseReceived,
@@ -218,4 +222,33 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	resp.Body = ingestor
 
 	return resp, nil
+}
+
+func removeHopByHopHeaders(headers http.Header) {
+	// Implements RFC 9111 section 3.1
+
+	// The Connection header field and fields whose names are listed in it are
+	// required by Section 7.6.1 of RFC 9110 to be removed before forwarding the
+	// message. This MAY be implemented by doing so before storage.
+	headers.Del("Connection")
+
+	// Likewise, some fields' semantics require them to be removed before
+	// forwarding the message, and this MAY be implemented by doing so before
+	// storage; see Section 7.6.1 of RFC 9110 for some examples.
+	headers.Del("Proxy-Connection")
+	headers.Del("Keep-Alive")
+	headers.Del("Te")
+	headers.Del("Trailer")
+	headers.Del("Transfer-Encoding")
+	headers.Del("Upgrade")
+
+	// Header fields that are specific to the proxy that a cache uses when
+	// forwarding a request MUST NOT be stored, unless the cache incorporates
+	// the identity of the proxy into the cache key. Effectively, this is
+	// limited to Proxy-Authenticate (Section 11.7.1 of RFC 9110),
+	// Proxy-Authentication-Info (Section 11.7.3 of RFC 9110), and
+	// Proxy-Authorization (Section 11.7.2 of RFC 9110)
+	headers.Del("Proxy-Authenticate")
+	headers.Del("Proxy-Authentication-Info")
+	headers.Del("Proxy-Authorization")
 }
