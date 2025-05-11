@@ -3,6 +3,7 @@ package httpclient
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path"
 	"strconv"
@@ -67,7 +68,10 @@ func buildKey(req *http.Request) string {
 	return req.Method + "+" + req.URL.String()
 }
 
-func (c *Client) selectResponseCandidates(req *http.Request, dbEntry *database.Entry[[]cachedResponse]) []cachedResponse {
+func (c *Client) selectResponseCandidates(
+	req *http.Request,
+	dbEntry *database.Entry[[]cachedResponse],
+) []cachedResponse {
 	candidates := []cachedResponse{}
 
 	for _, resp := range dbEntry.Value {
@@ -95,7 +99,7 @@ func (c *Client) selectMostRecentCandidates(candidates []cachedResponse) []cache
 			mostRecentCandidates = mostRecentCandidates[:0]
 			mostRecentCandidates = append(mostRecentCandidates, candidate)
 			maxDate = date
-		} else if date == maxDate {
+		} else if date.Equal(maxDate) {
 			mostRecentCandidates = append(mostRecentCandidates, candidate)
 		}
 	}
@@ -103,14 +107,22 @@ func (c *Client) selectMostRecentCandidates(candidates []cachedResponse) []cache
 	return mostRecentCandidates
 }
 
-func (c *Client) serveFromCachedCandidates(req *http.Request, candidates []cachedResponse) *http.Response {
+func (c *Client) serveFromCachedCandidates(
+	req *http.Request,
+	candidates []cachedResponse,
+) *http.Response {
 	// FIXME: most recent is not necessarily most prefered,
 	//	      we might want to implement proper preferences
 	//		  See https://datatracker.ietf.org/doc/html/rfc9111#section-4.1
 	mostRecentCandidates := c.selectMostRecentCandidates(candidates)
 
 	for _, resp := range mostRecentCandidates {
-		age, isFresh := httpcaching.IsFresh(resp.Headers, resp.TimeAtRequestCreated, resp.TimeAtResponseReceived, c.logger)
+		age, isFresh := httpcaching.IsFresh(
+			resp.Headers,
+			resp.TimeAtRequestCreated,
+			resp.TimeAtResponseReceived,
+			c.logger,
+		)
 		if isFresh {
 			body, err := c.cache.Open(resp.ContentHash)
 			if err != nil {
@@ -157,11 +169,10 @@ func (c *Client) serveFromCache(
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	removeHopByHopHeaders(req.Header)
-
 	// We only support caching GET requests
 	if req.Method != http.MethodGet {
-		return c.client.Do(req)
+		resp, _, _, err := c.forwardRequest(req)
+		return resp, err
 	}
 
 	cacheKey := buildKey(req)
@@ -172,19 +183,39 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	c.logger.Debug().Stringer("url", req.URL).Err(err).Msg("unable to serve from cache")
 
-	timeAtRequestCreated := time.Now().UTC()
-	resp, err := c.client.Do(req)
+	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req)
 	if err != nil {
 		return resp, err
 	}
-	timeAtResponseReceived := time.Now().UTC()
-
-	removeHopByHopHeaders(resp.Header)
 
 	if !httpcaching.IsCacheable(resp) {
 		c.logger.Debug().Stringer("url", req.URL).Msg("request is not cacheable")
 		return resp, nil
 	}
+
+	resp.Body = c.setupIngestion(
+		req,
+		resp,
+		timeAtRequestCreated,
+		timeAtResponseReceived,
+		cacheKey,
+		dbEntry,
+	)
+	return resp, nil
+}
+
+func (c *Client) forwardRequest(req *http.Request) (*http.Response, time.Time, time.Time, error) {
+	removeHopByHopHeaders(req.Header)
+
+	timeAtRequestCreated := time.Now().UTC()
+	resp, err := c.client.Do(req)
+	timeAtResponseReceived := time.Now().UTC()
+
+	if err != nil {
+		return resp, timeAtRequestCreated, timeAtResponseReceived, err
+	}
+
+	removeHopByHopHeaders(resp.Header)
 
 	// Ensure the Date header is valid,
 	// as per https://datatracker.ietf.org/doc/html/rfc9110#name-date
@@ -193,7 +224,19 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		resp.Header["Date"] = []string{time.Now().UTC().Format(http.TimeFormat)}
 	}
 
-	ingestor := c.cache.SetupIngestion(resp.Body, func(hash string) {
+	return resp, timeAtRequestCreated, timeAtResponseReceived, err
+}
+
+func (c *Client) setupIngestion(
+	req *http.Request,
+	resp *http.Response,
+	timeAtRequestCreated, timeAtResponseReceived time.Time,
+	cacheKey string,
+	dbEntry *database.Entry[[]cachedResponse],
+) io.ReadCloser {
+	return c.cache.SetupIngestion(resp.Body, func(hash string) {
+		var err error
+
 		cacheResp := cachedResponse{
 			hash,
 			resp.StatusCode,
@@ -219,9 +262,6 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			c.logger.Debug().Stringer("url", req.URL).Msg("request saved in the database")
 		}
 	})
-	resp.Body = ingestor
-
-	return resp, nil
 }
 
 func removeHopByHopHeaders(headers http.Header) {

@@ -11,7 +11,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func getFreshnessLifetime(headers http.Header, cacheControl CacheControlResponseDirective, logger zerolog.Logger) time.Duration {
+func getFreshnessLifetime(
+	headers http.Header,
+	cacheControl CacheControlResponseDirective,
+	logger zerolog.Logger,
+) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.1
 	if cacheControl.SMaxAge != 0 {
 		return cacheControl.SMaxAge
@@ -91,5 +95,6 @@ func IsFresh(
 	}
 	age := getCurrentAge(headers, requestTime, responseTime, logger)
 
-	return age, cacheControl.NoCache || cacheControl.MustRevalidate || getFreshnessLifetime(headers, cacheControl, logger) > age
+	return age, cacheControl.NoCache || cacheControl.MustRevalidate ||
+		getFreshnessLifetime(headers, cacheControl, logger) > age
 }
