@@ -59,7 +59,7 @@ func TestGetFreshness(t *testing.T) {
 }
 
 func TestGetCurrentAge(t *testing.T) {
-	age := getCurrentAge(
+	age := GetCurrentAge(
 		http.Header{
 			"Age":  []string{"60"},
 			"Date": []string{time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
@@ -74,12 +74,12 @@ func TestGetCurrentAge(t *testing.T) {
 func TestIsFresh(t *testing.T) {
 	age, isFresh := IsFresh(
 		http.Header{
-			"Age":           []string{"60"},
-			"Cache-Control": []string{"s-max-age=300"},
+			"Age": []string{"60"},
 			"Date": []string{
 				time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
 			},
 		},
+		CacheControlResponseDirective{SMaxAge: 300 * time.Second},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),
@@ -91,12 +91,12 @@ func TestIsFresh(t *testing.T) {
 func TestIsNotFresh(t *testing.T) {
 	age, isFresh := IsFresh(
 		http.Header{
-			"Age":           []string{"60"},
-			"Cache-Control": []string{"s-max-age=30"},
+			"Age": []string{"60"},
 			"Date": []string{
 				time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
 			},
 		},
+		CacheControlResponseDirective{SMaxAge: 30 * time.Second},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),

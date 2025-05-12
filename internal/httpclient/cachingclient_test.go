@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -392,6 +393,87 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 					"Vary":           []string{"Count"},
 				},
 				http.Header{"Count": []string{"2"}},
+				time.Time{},
+				time.Time{},
+			},
+		},
+	})
+}
+
+func TestValidationEtag(t *testing.T) {
+	t.Parallel()
+
+	client, validateCache := setup(t)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "public, no-cache")
+		w.Header().Add("Etag", "Hello")
+
+		if slices.ContainsFunc(
+			r.Header["If-None-Match"],
+			func(e string) bool { return e == "Hello" },
+		) {
+			w.Header().Add("Stale", "1")
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	// First request should get the answer
+	resp1, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{})
+	assert.Equal(t, 200, resp1.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Cache-Control":  []string{"public, no-cache"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           resp1.Header["Date"],
+			"Etag":           []string{"Hello"},
+		},
+		resp1.Header,
+	)
+
+	// Second request should revalidate
+	resp2, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{})
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Age":            []string{"0"},
+			"Cache-Control":  []string{"public, no-cache"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           resp2.Header["Date"],
+			"Etag":           []string{"Hello"},
+			"Stale":          []string{"1"},
+		},
+		resp2.Header,
+	)
+
+	require.NoError(t, client.Close())
+
+	validateCache(map[string][]cachedResponse{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public, no-cache"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp2.Header["Date"],
+					"Etag":           []string{"Hello"},
+					"Stale":          []string{"1"},
+				},
+				http.Header{},
 				time.Time{},
 				time.Time{},
 			},

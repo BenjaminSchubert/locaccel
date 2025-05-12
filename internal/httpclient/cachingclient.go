@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -16,7 +17,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
 )
 
-var errNoMatchVaryHeaders = errors.New("vary headers don't match")
+var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
 
 type cachedResponse struct {
 	ContentHash            string
@@ -117,8 +118,18 @@ func (c *Client) serveFromCachedCandidates(
 	mostRecentCandidates := c.selectMostRecentCandidates(candidates)
 
 	for _, resp := range mostRecentCandidates {
+		cacheControl, err := httpcaching.ParseCacheControlDirective(resp.Headers["Cache-Control"])
+		if err != nil {
+			c.logger.Warn().Err(err).Msg("unable to parse cache control directives")
+		}
+
+		if cacheControl.NoCache || cacheControl.MustRevalidate {
+			continue
+		}
+
 		age, isFresh := httpcaching.IsFresh(
 			resp.Headers,
+			cacheControl,
 			resp.TimeAtRequestCreated,
 			resp.TimeAtResponseReceived,
 			c.logger,
@@ -145,27 +156,21 @@ func (c *Client) serveFromCachedCandidates(
 
 func (c *Client) serveFromCache(
 	req *http.Request,
-	cacheKey string,
-) (*http.Response, *database.Entry[[]cachedResponse], error) {
-	dbEntry, err := c.db.Get(cacheKey)
-	if err != nil {
-		// No entry cached yet
-		return nil, nil, err
-	}
-
+	dbEntry *database.Entry[[]cachedResponse],
+) *http.Response {
 	candidates := c.selectResponseCandidates(req, dbEntry)
 	if len(candidates) == 0 {
 		// No candidate can be used
-		return nil, dbEntry, errNoMatchVaryHeaders
+		return nil
 	}
 
 	resp := c.serveFromCachedCandidates(req, candidates)
 	if resp != nil {
-		return resp, dbEntry, nil
+		return resp
 	}
 
 	// All responses are stale, we need to revalidate
-	return nil, nil, nil
+	return nil
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
@@ -177,15 +182,47 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	cacheKey := buildKey(req)
 
-	cachedResp, dbEntry, err := c.serveFromCache(req, cacheKey)
+	dbEntry, err := c.db.Get(cacheKey)
 	if err == nil {
-		return cachedResp, nil
+		resp := c.serveFromCache(req, dbEntry)
+		if resp != nil {
+			return resp, nil
+		}
+	} else if err != database.ErrKeyNotFound {
+		c.logger.Debug().Err(err).Msg("unable to retrieve entry from database, no response fresh")
 	}
-	c.logger.Debug().Stringer("url", req.URL).Err(err).Msg("unable to serve from cache")
 
+	hasConditionalInformation := false
+	if dbEntry != nil {
+		hasConditionalInformation = c.addConditionalRequestInformation(req, dbEntry)
+	}
+
+	c.logger.Debug().Stringer("url", req.URL).Msg("unable to serve from cache")
+
+	// FIXME: use stale entries from cache on 5XX+
 	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req)
 	if err != nil {
 		return resp, err
+	}
+
+	if hasConditionalInformation && resp.StatusCode == http.StatusNotModified {
+		resp, err := c.updateCache(
+			cacheKey,
+			dbEntry,
+			resp,
+			timeAtRequestCreated,
+			timeAtResponseReceived,
+		)
+		if err != nil && !errors.Is(err, errNoMatchingEntryInCache) {
+			// FIXME: check if original request was conditional and return if so
+			panic(err)
+		}
+		if resp != nil {
+			c.logger.Debug().
+				Stringer("url", req.URL).
+				Msg("request re-validated, serving from cache")
+			return resp, nil
+		}
 	}
 
 	if !httpcaching.IsCacheable(resp) {
@@ -202,6 +239,31 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		dbEntry,
 	)
 	return resp, nil
+}
+
+func (c *Client) addConditionalRequestInformation(
+	req *http.Request,
+	dbEntry *database.Entry[[]cachedResponse],
+) bool {
+	// FIXME: add If-Not-Modified-Since
+
+	etags := []string{}
+
+	for _, entry := range dbEntry.Value {
+		etags = append(etags, entry.Headers["Etag"]...)
+	}
+
+	if len(etags) != 0 {
+		originalEtag := req.Header["If-None-Match"]
+		if originalEtag != nil {
+			etags = append(etags, originalEtag...)
+		}
+
+		// Some servers don't support more than one If-None-Match headers
+		req.Header["If-None-Match"] = []string{strings.Join(etags, ", ")}
+	}
+
+	return len(etags) != 0
 }
 
 func (c *Client) forwardRequest(req *http.Request) (*http.Response, time.Time, time.Time, error) {
@@ -262,6 +324,56 @@ func (c *Client) setupIngestion(
 			c.logger.Debug().Stringer("url", req.URL).Msg("request saved in the database")
 		}
 	})
+}
+
+func (c *Client) updateCache(
+	cacheKey string,
+	dbEntry *database.Entry[[]cachedResponse],
+	resp *http.Response,
+	timeAtRequestCreated, timeAtResponseReceived time.Time,
+) (*http.Response, error) {
+	if etag := resp.Header.Get("Etag"); etag != "" {
+		for _, cachedResp := range dbEntry.Value {
+			if cachedResp.Headers.Get("Etag") == etag {
+				for key, val := range resp.Header {
+					if key != "Content-Length" {
+						cachedResp.Headers[key] = val
+					}
+				}
+
+				if err := c.db.Save(cacheKey, dbEntry); err != nil {
+					c.logger.Error().Err(err).Msg("Error updating the entry in the cache")
+				}
+
+				body, err := c.cache.Open(cachedResp.ContentHash)
+				if err != nil {
+					// FIXME: delete entry, it's useless now
+					panic("Unable to serve cached entry")
+				}
+				if err := resp.Body.Close(); err != nil {
+					c.logger.Error().Err(err).Msg("Error closing upstream request body")
+				}
+
+				resp := &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       body,
+					Header:     cachedResp.Headers.Clone(),
+				}
+
+				age := httpcaching.GetCurrentAge(
+					resp.Header,
+					timeAtRequestCreated,
+					timeAtResponseReceived,
+					c.logger,
+				)
+				resp.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
+
+				return resp, nil
+			}
+		}
+	}
+
+	return resp, errNoMatchingEntryInCache
 }
 
 func removeHopByHopHeaders(headers http.Header) {

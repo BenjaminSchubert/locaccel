@@ -41,7 +41,7 @@ func getFreshnessLifetime(
 	return 0
 }
 
-func getCurrentAge(
+func GetCurrentAge(
 	headers http.Header,
 	requestTime, responseTime time.Time,
 	logger zerolog.Logger,
@@ -85,16 +85,11 @@ func getCurrentAge(
 
 func IsFresh(
 	headers http.Header,
+	cacheControl CacheControlResponseDirective,
 	requestTime, responseTime time.Time,
 	logger zerolog.Logger,
 ) (time.Duration, bool) {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2
-	cacheControl, err := ParseCacheControlDirective(headers.Values("cache-control"))
-	if err != nil {
-		logger.Warn().Err(err).Msg("unable to parse cache control directives")
-	}
-	age := getCurrentAge(headers, requestTime, responseTime, logger)
-
-	return age, cacheControl.NoCache || cacheControl.MustRevalidate ||
-		getFreshnessLifetime(headers, cacheControl, logger) > age
+	age := GetCurrentAge(headers, requestTime, responseTime, logger)
+	return age, getFreshnessLifetime(headers, cacheControl, logger) > age
 }
