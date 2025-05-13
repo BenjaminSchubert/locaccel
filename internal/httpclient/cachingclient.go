@@ -111,6 +111,7 @@ func (c *Client) selectMostRecentCandidates(
 
 func (c *Client) serveFromCachedCandidates(
 	candidates []cachedResponse,
+	forceStale bool,
 	logger *zerolog.Logger,
 ) *http.Response {
 	// FIXME: most recent is not necessarily most prefered,
@@ -135,14 +136,13 @@ func (c *Client) serveFromCachedCandidates(
 			resp.TimeAtResponseReceived,
 			logger,
 		)
-		if isFresh {
+		if isFresh || forceStale {
 			body, err := c.cache.Open(resp.ContentHash, logger)
 			if err != nil {
 				// FIXME: delete entry, it's useless now
 				continue
 			}
 
-			logger.Debug().Msg("serving response from cache")
 			resp.Headers.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 			return &http.Response{
 				Body:       body,
@@ -158,6 +158,7 @@ func (c *Client) serveFromCachedCandidates(
 func (c *Client) serveFromCache(
 	req *http.Request,
 	dbEntry *database.Entry[[]cachedResponse],
+	forceStale bool,
 	logger *zerolog.Logger,
 ) *http.Response {
 	candidates := c.selectResponseCandidates(req, dbEntry, logger)
@@ -166,7 +167,7 @@ func (c *Client) serveFromCache(
 		return nil
 	}
 
-	resp := c.serveFromCachedCandidates(candidates, logger)
+	resp := c.serveFromCachedCandidates(candidates, forceStale, logger)
 	if resp != nil {
 		return resp
 	}
@@ -188,8 +189,9 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	dbEntry, err := c.db.Get(cacheKey)
 	if err == nil {
-		resp := c.serveFromCache(req, dbEntry, logger)
+		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
+			logger.Debug().Msg("serving response from cache")
 			return resp, nil
 		}
 	} else if err != database.ErrKeyNotFound {
@@ -203,9 +205,16 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	logger.Debug().Msg("unable to serve from cache")
 
-	// FIXME: use stale entries from cache on 5XX+
 	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req, logger)
-	if err != nil {
+	if err != nil || resp.StatusCode >= 500 {
+		if dbEntry != nil {
+			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
+				logger.Warn().
+					Err(err).
+					Msg("unable to contact upstream, serving stale response from cache")
+				return cRep, nil
+			}
+		}
 		return resp, err
 	}
 

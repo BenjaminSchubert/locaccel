@@ -138,6 +138,9 @@ func makeRequest(
 
 	req, err := http.NewRequest(method, url, nil)
 	require.NoError(t, err)
+	logger := testutils.TestLogger(t)
+	req = req.WithContext(logger.WithContext(req.Context()))
+
 	req.Header = headers
 
 	resp, err := client.Do(req)
@@ -479,4 +482,78 @@ func TestValidationEtag(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
+	t.Parallel()
+
+	client, _ := setup(t)
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	wasCalled := false
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if wasCalled {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+
+		w.Header().Add("Cache-Control", "public, max-age=0")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+		wasCalled = true
+	}))
+	t.Cleanup(srv.Close)
+
+	// Initial Query
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil)
+
+	date := resp.Header["Date"]
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Cache-Control":  []string{"public, max-age=0"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           date,
+		},
+		resp.Header,
+	)
+
+	// Second query getting a 5XX, should be served by the cache
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Age":            []string{"0"},
+			"Cache-Control":  []string{"public, max-age=0"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           date,
+		},
+		resp.Header,
+	)
+
+	// Third Query, should still be served by the cache
+	srv.Close()
+
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Age":            []string{"0"},
+			"Cache-Control":  []string{"public, max-age=0"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           date,
+		},
+		resp.Header,
+	)
 }
