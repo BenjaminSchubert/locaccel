@@ -39,7 +39,7 @@ func ParseCacheControlDirective(header []string) (CacheControlResponseDirective,
 	response := CacheControlResponseDirective{}
 
 	for _, hdr := range header {
-		for _, directive := range strings.Split(hdr, ",") {
+		for directive := range strings.SplitSeq(hdr, ",") {
 			key, val, found := strings.Cut(strings.TrimSpace(directive), "=")
 
 			if found {
