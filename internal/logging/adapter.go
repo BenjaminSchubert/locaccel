@@ -6,9 +6,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type LoggerAdapter struct{ log zerolog.Logger }
+type LoggerAdapter struct{ log *zerolog.Logger }
 
-func NewLoggerAdapter(log zerolog.Logger) *LoggerAdapter {
+func NewLoggerAdapter(log *zerolog.Logger) *LoggerAdapter {
 	return &LoggerAdapter{log}
 }
 

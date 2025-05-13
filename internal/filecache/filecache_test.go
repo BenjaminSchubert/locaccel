@@ -22,7 +22,8 @@ const testData = "1234567890"
 func TestCanIngestAndRecover(t *testing.T) {
 	t.Parallel()
 
-	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir())
 	require.NoError(t, err)
 
 	computedHash := ""
@@ -30,6 +31,7 @@ func TestCanIngestAndRecover(t *testing.T) {
 	reader := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { computedHash = hash },
+		logger,
 	)
 
 	data, err := io.ReadAll(reader)
@@ -44,7 +46,7 @@ func TestCanIngestAndRecover(t *testing.T) {
 		computedHash,
 	)
 
-	fp, err := cache.Open(computedHash)
+	fp, err := cache.Open(computedHash, logger)
 	require.NoError(t, err)
 
 	result, err := io.ReadAll(fp)
@@ -55,8 +57,9 @@ func TestCanIngestAndRecover(t *testing.T) {
 
 func TestHandlesConcurrentWrites(t *testing.T) {
 	t.Parallel()
+	logger := testutils.TestLogger(t)
 
-	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
+	cache, err := filecache.NewFileCache(t.TempDir())
 	require.NoError(t, err)
 
 	hash1 := ""
@@ -65,10 +68,12 @@ func TestHandlesConcurrentWrites(t *testing.T) {
 	reader1 := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { hash1 = hash },
+		logger,
 	)
 	reader2 := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { hash2 = hash },
+		logger,
 	)
 
 	data, err := io.ReadAll(reader1)
@@ -89,13 +94,15 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	t.Parallel()
 
 	cacheDir := t.TempDir()
+	logger := testutils.TestLogger(t)
 
-	cache, err := filecache.NewFileCache(cacheDir, testutils.TestLogger(t))
+	cache, err := filecache.NewFileCache(cacheDir)
 	require.NoError(t, err)
 
 	reader := cache.SetupIngestion(
 		io.NopCloser(iotest.ErrReader(errTest)),
 		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+		logger,
 	)
 
 	_, err = io.ReadAll(reader)
@@ -107,10 +114,11 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
-	cache, err := filecache.NewFileCache(t.TempDir(), testutils.TestLogger(t))
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir())
 	require.NoError(t, err)
 
-	fp, err := cache.Open("nonexistent")
+	fp, err := cache.Open("nonexistent", logger)
 	require.ErrorIs(t, err, filecache.ErrCannotOpen)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	require.Nil(t, fp)

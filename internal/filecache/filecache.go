@@ -21,12 +21,11 @@ var (
 )
 
 type FileCache struct {
-	logger zerolog.Logger
 	root   string
 	tmpdir string
 }
 
-func NewFileCache(root string, logger zerolog.Logger) (*FileCache, error) {
+func NewFileCache(root string) (*FileCache, error) {
 	tmpdir := path.Join(root, "_tmp")
 
 	// Ensure the tempdir exists
@@ -53,13 +52,17 @@ func NewFileCache(root string, logger zerolog.Logger) (*FileCache, error) {
 		}
 	}
 
-	return &FileCache{logger, root, tmpdir}, nil
+	return &FileCache{root, tmpdir}, nil
 }
 
-func (f *FileCache) SetupIngestion(src io.ReadCloser, onIngest func(hash string)) io.ReadCloser {
+func (f *FileCache) SetupIngestion(
+	src io.ReadCloser,
+	onIngest func(hash string),
+	logger *zerolog.Logger,
+) io.ReadCloser {
 	dest, err := os.CreateTemp(f.tmpdir, "ingest-XXX")
 	if err != nil {
-		f.logger.Error().Err(err).Msg("Unable to create temporary file")
+		logger.Error().Err(err).Msg("Unable to create temporary file")
 		return src
 	}
 
@@ -77,22 +80,22 @@ func (f *FileCache) SetupIngestion(src io.ReadCloser, onIngest func(hash string)
 					reason = "Write Error"
 				}
 
-				f.logger.Error().
+				logger.Error().
 					Str("reason", reason).
 					Err(err).
 					Msg("an error happened ingesting the file")
-				return f.cleanup(src, dest)
+				return f.cleanup(src, dest, logger)
 			}
 
 			hash := hex.EncodeToString(hasher.Sum(nil))
 
 			if err := os.Rename(dest.Name(), path.Join(f.root, hash[:2], hash[2:])); err != nil {
-				f.logger.Error().Err(err).Msg("unable to rename file for ingestion")
-				return f.cleanup(src, dest)
+				logger.Error().Err(err).Msg("unable to rename file for ingestion")
+				return f.cleanup(src, dest, logger)
 			}
 
 			if err := dest.Close(); err != nil {
-				f.logger.Error().Err(err).Msg("Unable to close temporary file after ingestion")
+				logger.Error().Err(err).Msg("Unable to close temporary file after ingestion")
 				return src.Close()
 			}
 
@@ -102,24 +105,24 @@ func (f *FileCache) SetupIngestion(src io.ReadCloser, onIngest func(hash string)
 	)
 }
 
-func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File) error {
+func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File, logger *zerolog.Logger) error {
 	if e := dest.Close(); e != nil {
-		f.logger.Error().Err(e).Msg("error closing temporary file.")
+		logger.Error().Err(e).Msg("error closing temporary file.")
 	}
 	if e := os.Remove(dest.Name()); e != nil {
-		f.logger.Error().Err(e).Msg("error removing temporary file.")
+		logger.Error().Err(e).Msg("error removing temporary file.")
 	}
 
 	return src.Close()
 }
 
-func (f *FileCache) Open(hash string) (io.ReadCloser, error) {
+func (f *FileCache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, error) {
 	fp, err := os.Open(path.Join(f.root, hash[:2], hash[2:]))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrCannotOpen, err)
 	}
 	if err := os.Chtimes(fp.Name(), time.Time{}, time.Now()); err != nil {
-		f.logger.Warn().Err(err).Msg("unable to update mtime for cached file")
+		logger.Warn().Err(err).Msg("unable to update mtime for cached file")
 	}
 	return fp, nil
 }

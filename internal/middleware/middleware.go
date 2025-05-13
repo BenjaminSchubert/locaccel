@@ -2,25 +2,26 @@ package middleware
 
 import (
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
 
-type redactedURL struct {
-	url *url.URL
-}
+func newLoggingMiddleware(handler http.Handler, logger *zerolog.Logger) http.Handler {
+	logHandler := hlog.NewHandler(*logger)
 
-func (r redactedURL) String() string {
-	return r.url.Redacted()
-}
+	correlationID := hlog.RequestIDHandler("id", "X-Locaccel-Correlation-ID")
 
-func newLoggingMiddleware(handler http.Handler, logger zerolog.Logger) http.Handler {
-	logHandler := hlog.NewHandler(logger)
-
-	correlationID := hlog.RequestIDHandler("id", "X-Correlation-ID")
+	urlHandler := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log := zerolog.Ctx(r.Context())
+			log.UpdateContext(func(c zerolog.Context) zerolog.Context {
+				return c.Str("url", r.URL.Redacted())
+			})
+			next.ServeHTTP(w, r)
+		})
+	}
 
 	access := hlog.AccessHandler(func(req *http.Request, status, size int, duration time.Duration) {
 		level := zerolog.InfoLevel
@@ -30,33 +31,35 @@ func newLoggingMiddleware(handler http.Handler, logger zerolog.Logger) http.Hand
 			level = zerolog.WarnLevel
 		}
 
-		hlog.FromRequest(req).WithLevel(level).
+		l := hlog.FromRequest(req).WithLevel(level)
+		if ua := req.Header.Get("User-Agent"); ua != "" {
+			l = l.Str("usage-agent", ua)
+		}
+		l.
+			Str("ip", req.RemoteAddr).
 			Str("method", req.Method).
-			Stringer("url", redactedURL{req.URL}).
 			Int("status", status).
 			Int("size", size).
 			Dur("duration", duration).
 			Msg("Processed request")
 	})
-	remote := hlog.RemoteAddrHandler("ip")
-	userAgent := hlog.UserAgentHandler("user-agent")
 
-	return logHandler(correlationID(access(remote(userAgent(handler)))))
+	return logHandler(correlationID(access(urlHandler(handler))))
 }
 
-func newTraceMiddleware(next http.Handler, logger zerolog.Logger) http.Handler {
+func newTraceMiddleware(next http.Handler, logger *zerolog.Logger) http.Handler {
 	if logger.GetLevel() > zerolog.TraceLevel {
 		logger.Debug().Msg("Tracing disabled, not adding trace middleware")
 		return next
 	}
 
 	return http.HandlerFunc(func(respw http.ResponseWriter, req *http.Request) {
-		// FIXME: can we avoid using Any for performance?
+		headers := req.Header.Clone()
+		headers.Del("Authorization")
+
 		hlog.FromRequest(req).Trace().
-			// FIXME: drop authorization header
-			Any("headers", req.Header).
+			Any("headers", headers).
 			Str("method", req.Method).
-			Stringer("url", redactedURL{req.URL}).
 			Msg("Received request")
 		defer func() {
 			hlog.FromRequest(req).Trace().Any("headers", respw.Header()).Msg("Returned response")
@@ -65,6 +68,6 @@ func newTraceMiddleware(next http.Handler, logger zerolog.Logger) http.Handler {
 	})
 }
 
-func ApplyAllMiddlewares(handler http.Handler, logger zerolog.Logger) http.Handler {
+func ApplyAllMiddlewares(handler http.Handler, logger *zerolog.Logger) http.Handler {
 	return newLoggingMiddleware(newTraceMiddleware(handler, logger), logger)
 }

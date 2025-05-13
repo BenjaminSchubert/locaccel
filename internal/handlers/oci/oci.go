@@ -12,7 +12,7 @@ import (
 func RegisterHandler(registry string, handler *http.ServeMux, client *httpclient.Client) {
 	handler.HandleFunc("GET /v2/", func(w http.ResponseWriter, r *http.Request) {
 		url := registry + r.URL.RequestURI()
-		upstreamReq, err := http.NewRequest(r.Method, url, r.Body)
+		upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, url, r.Body)
 		if err != nil {
 			hlog.FromRequest(r).Panic().Err(err).Msg("Error generating new upstream request")
 		}

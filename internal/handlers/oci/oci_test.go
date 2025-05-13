@@ -21,7 +21,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
-func newClient(t *testing.T, logger zerolog.Logger) *httpclient.Client {
+func newClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 	t.Helper()
 
 	client := &http.Client{

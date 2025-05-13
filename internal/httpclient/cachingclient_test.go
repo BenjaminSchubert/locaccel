@@ -27,7 +27,7 @@ import (
 func getAllEntriesInDB(
 	t *testing.T,
 	cacheRoot string,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 ) map[string][]cachedResponse {
 	t.Helper()
 
@@ -83,7 +83,7 @@ func getAllEntriesInFileCache(t *testing.T, cacheRoot string) []string {
 func validateCache(
 	t *testing.T,
 	cacheRoot string,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 	expected map[string][]cachedResponse,
 	startTime time.Time,
 ) {

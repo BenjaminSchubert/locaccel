@@ -39,7 +39,7 @@ func ExtractVaryHeaders(reqHeaders, respHeaders http.Header) http.Header {
 	return relevantHeaders
 }
 
-func MatchVaryHeaders(reqHeaders, varyHeaders http.Header, logger zerolog.Logger) bool {
+func MatchVaryHeaders(reqHeaders, varyHeaders http.Header, logger *zerolog.Logger) bool {
 	if _, ok := varyHeaders["*"]; ok {
 		return false
 	}

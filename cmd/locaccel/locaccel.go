@@ -21,7 +21,7 @@ import (
 func createServer(
 	conf config.Config,
 	client *httpclient.Client,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 ) *http.Server {
 	handler := http.NewServeMux()
 
@@ -87,7 +87,7 @@ func main() {
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
-	cachingClient, err := httpclient.New(client, conf.CachePath, logger)
+	cachingClient, err := httpclient.New(client, conf.CachePath, &logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("unable to start server: can't setup cache")
 	}
@@ -98,7 +98,7 @@ func main() {
 		}
 	}()
 
-	server := createServer(conf, cachingClient, logger)
+	server := createServer(conf, cachingClient, &logger)
 
 	if err = runServer(server, logger); err != nil {
 		logger.Panic().Err(err).Msg("Error shutting down server")

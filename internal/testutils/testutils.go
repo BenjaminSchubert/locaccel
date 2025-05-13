@@ -6,6 +6,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func TestLogger(t *testing.T) zerolog.Logger {
-	return zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(t)))
+func TestLogger(t *testing.T) *zerolog.Logger {
+	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(t)))
+	return &logger
 }

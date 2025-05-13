@@ -14,7 +14,7 @@ import (
 func getFreshnessLifetime(
 	headers http.Header,
 	cacheControl CacheControlResponseDirective,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 ) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.1
 	if cacheControl.SMaxAge != 0 {
@@ -44,7 +44,7 @@ func getFreshnessLifetime(
 func GetCurrentAge(
 	headers http.Header,
 	requestTime, responseTime time.Time,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 ) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.3
 	// FIXME: can we precompute most of this and avoid storing this additional data?
@@ -87,7 +87,7 @@ func IsFresh(
 	headers http.Header,
 	cacheControl CacheControlResponseDirective,
 	requestTime, responseTime time.Time,
-	logger zerolog.Logger,
+	logger *zerolog.Logger,
 ) (time.Duration, bool) {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2
 	age := GetCurrentAge(headers, requestTime, responseTime, logger)

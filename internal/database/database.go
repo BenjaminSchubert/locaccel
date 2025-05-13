@@ -35,7 +35,7 @@ type Database[T any] struct {
 	db *badger.DB
 }
 
-func NewDatabase[T any](path string, logger zerolog.Logger) (*Database[T], error) {
+func NewDatabase[T any](path string, logger *zerolog.Logger) (*Database[T], error) {
 	badgerDB, err := badger.Open(
 		badger.DefaultOptions(path).WithLogger(logging.NewLoggerAdapter(logger)),
 	)

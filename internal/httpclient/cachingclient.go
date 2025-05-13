@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/filecache"
@@ -32,14 +33,10 @@ type Client struct {
 	client *http.Client
 	db     *database.Database[[]cachedResponse]
 	cache  *filecache.FileCache
-	logger zerolog.Logger
 }
 
-func New(client *http.Client, cachePath string, logger zerolog.Logger) (*Client, error) {
-	cache, err := filecache.NewFileCache(
-		path.Join(cachePath, "cache"),
-		logger.With().Str("component", "filecache").Logger(),
-	)
+func New(client *http.Client, cachePath string, logger *zerolog.Logger) (*Client, error) {
+	cache, err := filecache.NewFileCache(path.Join(cachePath, "cache"))
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize file cache: %w", err)
 	}
@@ -52,13 +49,13 @@ func New(client *http.Client, cachePath string, logger zerolog.Logger) (*Client,
 
 	db, err := database.NewDatabase[[]cachedResponse](
 		path.Join(cachePath, "db"),
-		dbLogger,
+		&dbLogger,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to initialize database: %w", err)
 	}
 
-	return &Client{client, db, cache, logger}, nil
+	return &Client{client, db, cache}, nil
 }
 
 func (c *Client) Close() error {
@@ -72,11 +69,12 @@ func buildKey(req *http.Request) string {
 func (c *Client) selectResponseCandidates(
 	req *http.Request,
 	dbEntry *database.Entry[[]cachedResponse],
+	logger *zerolog.Logger,
 ) []cachedResponse {
 	candidates := []cachedResponse{}
 
 	for _, resp := range dbEntry.Value {
-		if httpcaching.MatchVaryHeaders(req.Header, resp.VaryHeaders, c.logger) {
+		if httpcaching.MatchVaryHeaders(req.Header, resp.VaryHeaders, logger) {
 			candidates = append(candidates, resp)
 		}
 	}
@@ -84,14 +82,17 @@ func (c *Client) selectResponseCandidates(
 	return candidates
 }
 
-func (c *Client) selectMostRecentCandidates(candidates []cachedResponse) []cachedResponse {
+func (c *Client) selectMostRecentCandidates(
+	candidates []cachedResponse,
+	logger *zerolog.Logger,
+) []cachedResponse {
 	mostRecentCandidates := make([]cachedResponse, 0, 1)
 	maxDate := time.Time{}
 
 	for _, candidate := range candidates {
 		date, err := http.ParseTime(candidate.Headers.Get("Date"))
 		if err != nil {
-			c.logger.Error().
+			logger.Error().
 				Err(err).
 				Msg("BUG: Date header is in an invalid format, which should not happen")
 			date = time.Time{}
@@ -109,18 +110,18 @@ func (c *Client) selectMostRecentCandidates(candidates []cachedResponse) []cache
 }
 
 func (c *Client) serveFromCachedCandidates(
-	req *http.Request,
 	candidates []cachedResponse,
+	logger *zerolog.Logger,
 ) *http.Response {
 	// FIXME: most recent is not necessarily most prefered,
 	//	      we might want to implement proper preferences
 	//		  See https://datatracker.ietf.org/doc/html/rfc9111#section-4.1
-	mostRecentCandidates := c.selectMostRecentCandidates(candidates)
+	mostRecentCandidates := c.selectMostRecentCandidates(candidates, logger)
 
 	for _, resp := range mostRecentCandidates {
 		cacheControl, err := httpcaching.ParseCacheControlDirective(resp.Headers["Cache-Control"])
 		if err != nil {
-			c.logger.Warn().Err(err).Msg("unable to parse cache control directives")
+			logger.Warn().Err(err).Msg("unable to parse cache control directives")
 		}
 
 		if cacheControl.NoCache || cacheControl.MustRevalidate {
@@ -132,16 +133,16 @@ func (c *Client) serveFromCachedCandidates(
 			cacheControl,
 			resp.TimeAtRequestCreated,
 			resp.TimeAtResponseReceived,
-			c.logger,
+			logger,
 		)
 		if isFresh {
-			body, err := c.cache.Open(resp.ContentHash)
+			body, err := c.cache.Open(resp.ContentHash, logger)
 			if err != nil {
 				// FIXME: delete entry, it's useless now
 				continue
 			}
 
-			c.logger.Debug().Stringer("url", req.URL).Msg("serving response from cache")
+			logger.Debug().Msg("serving response from cache")
 			resp.Headers.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 			return &http.Response{
 				Body:       body,
@@ -157,14 +158,15 @@ func (c *Client) serveFromCachedCandidates(
 func (c *Client) serveFromCache(
 	req *http.Request,
 	dbEntry *database.Entry[[]cachedResponse],
+	logger *zerolog.Logger,
 ) *http.Response {
-	candidates := c.selectResponseCandidates(req, dbEntry)
+	candidates := c.selectResponseCandidates(req, dbEntry, logger)
 	if len(candidates) == 0 {
 		// No candidate can be used
 		return nil
 	}
 
-	resp := c.serveFromCachedCandidates(req, candidates)
+	resp := c.serveFromCachedCandidates(candidates, logger)
 	if resp != nil {
 		return resp
 	}
@@ -174,9 +176,11 @@ func (c *Client) serveFromCache(
 }
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	logger := hlog.FromRequest(req)
+
 	// We only support caching GET requests
 	if req.Method != http.MethodGet {
-		resp, _, _, err := c.forwardRequest(req)
+		resp, _, _, err := c.forwardRequest(req, logger)
 		return resp, err
 	}
 
@@ -184,12 +188,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	dbEntry, err := c.db.Get(cacheKey)
 	if err == nil {
-		resp := c.serveFromCache(req, dbEntry)
+		resp := c.serveFromCache(req, dbEntry, logger)
 		if resp != nil {
 			return resp, nil
 		}
 	} else if err != database.ErrKeyNotFound {
-		c.logger.Debug().Err(err).Msg("unable to retrieve entry from database, no response fresh")
+		logger.Debug().Err(err).Msg("unable to retrieve entry from database, no response fresh")
 	}
 
 	hasConditionalInformation := false
@@ -197,10 +201,10 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		hasConditionalInformation = c.addConditionalRequestInformation(req, dbEntry)
 	}
 
-	c.logger.Debug().Stringer("url", req.URL).Msg("unable to serve from cache")
+	logger.Debug().Msg("unable to serve from cache")
 
 	// FIXME: use stale entries from cache on 5XX+
-	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req)
+	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req, logger)
 	if err != nil {
 		return resp, err
 	}
@@ -212,21 +216,20 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			resp,
 			timeAtRequestCreated,
 			timeAtResponseReceived,
+			logger,
 		)
 		if err != nil && !errors.Is(err, errNoMatchingEntryInCache) {
 			// FIXME: check if original request was conditional and return if so
 			panic(err)
 		}
 		if resp != nil {
-			c.logger.Debug().
-				Stringer("url", req.URL).
-				Msg("request re-validated, serving from cache")
+			logger.Debug().Msg("request re-validated, serving from cache")
 			return resp, nil
 		}
 	}
 
 	if !httpcaching.IsCacheable(resp) {
-		c.logger.Debug().Stringer("url", req.URL).Msg("request is not cacheable")
+		logger.Debug().Msg("request is not cacheable")
 		return resp, nil
 	}
 
@@ -237,6 +240,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		timeAtResponseReceived,
 		cacheKey,
 		dbEntry,
+		logger,
 	)
 	return resp, nil
 }
@@ -266,7 +270,10 @@ func (c *Client) addConditionalRequestInformation(
 	return len(etags) != 0
 }
 
-func (c *Client) forwardRequest(req *http.Request) (*http.Response, time.Time, time.Time, error) {
+func (c *Client) forwardRequest(
+	req *http.Request,
+	logger *zerolog.Logger,
+) (*http.Response, time.Time, time.Time, error) {
 	removeHopByHopHeaders(req.Header)
 
 	timeAtRequestCreated := time.Now().UTC()
@@ -282,7 +289,7 @@ func (c *Client) forwardRequest(req *http.Request) (*http.Response, time.Time, t
 	// Ensure the Date header is valid,
 	// as per https://datatracker.ietf.org/doc/html/rfc9110#name-date
 	if _, err := http.ParseTime(resp.Header.Get("Date")); err != nil {
-		c.logger.Debug().Err(err).Msg("invalid Date header replaced")
+		logger.Debug().Err(err).Msg("invalid Date header replaced")
 		resp.Header["Date"] = []string{time.Now().UTC().Format(http.TimeFormat)}
 	}
 
@@ -295,35 +302,37 @@ func (c *Client) setupIngestion(
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	cacheKey string,
 	dbEntry *database.Entry[[]cachedResponse],
+	logger *zerolog.Logger,
 ) io.ReadCloser {
-	return c.cache.SetupIngestion(resp.Body, func(hash string) {
-		var err error
+	return c.cache.SetupIngestion(
+		resp.Body,
+		func(hash string) {
+			var err error
 
-		cacheResp := cachedResponse{
-			hash,
-			resp.StatusCode,
-			resp.Header,
-			httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
-			timeAtRequestCreated,
-			timeAtResponseReceived,
-		}
+			cacheResp := cachedResponse{
+				hash,
+				resp.StatusCode,
+				resp.Header,
+				httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
+				timeAtRequestCreated,
+				timeAtResponseReceived,
+			}
 
-		if dbEntry != nil {
-			dbEntry.Value = append(dbEntry.Value, cacheResp)
-			err = c.db.Save(cacheKey, dbEntry)
-		} else {
-			err = c.db.New(cacheKey, []cachedResponse{cacheResp})
-		}
+			if dbEntry != nil {
+				dbEntry.Value = append(dbEntry.Value, cacheResp)
+				err = c.db.Save(cacheKey, dbEntry)
+			} else {
+				err = c.db.New(cacheKey, []cachedResponse{cacheResp})
+			}
 
-		if err != nil {
-			c.logger.Error().
-				Stringer("url", req.URL).
-				Err(err).
-				Msg("Error saving entry in the database")
-		} else {
-			c.logger.Debug().Stringer("url", req.URL).Msg("request saved in the database")
-		}
-	})
+			if err != nil {
+				logger.Error().Err(err).Msg("Error saving entry in the database")
+			} else {
+				logger.Debug().Msg("request saved in the database")
+			}
+		},
+		logger,
+	)
 }
 
 func (c *Client) updateCache(
@@ -331,6 +340,7 @@ func (c *Client) updateCache(
 	dbEntry *database.Entry[[]cachedResponse],
 	resp *http.Response,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
+	logger *zerolog.Logger,
 ) (*http.Response, error) {
 	if etag := resp.Header.Get("Etag"); etag != "" {
 		for _, cachedResp := range dbEntry.Value {
@@ -342,16 +352,16 @@ func (c *Client) updateCache(
 				}
 
 				if err := c.db.Save(cacheKey, dbEntry); err != nil {
-					c.logger.Error().Err(err).Msg("Error updating the entry in the cache")
+					logger.Error().Err(err).Msg("Error updating the entry in the cache")
 				}
 
-				body, err := c.cache.Open(cachedResp.ContentHash)
+				body, err := c.cache.Open(cachedResp.ContentHash, logger)
 				if err != nil {
 					// FIXME: delete entry, it's useless now
 					panic("Unable to serve cached entry")
 				}
 				if err := resp.Body.Close(); err != nil {
-					c.logger.Error().Err(err).Msg("Error closing upstream request body")
+					logger.Error().Err(err).Msg("Error closing upstream request body")
 				}
 
 				resp := &http.Response{
@@ -364,7 +374,7 @@ func (c *Client) updateCache(
 					resp.Header,
 					timeAtRequestCreated,
 					timeAtResponseReceived,
-					c.logger,
+					logger,
 				)
 				resp.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 
