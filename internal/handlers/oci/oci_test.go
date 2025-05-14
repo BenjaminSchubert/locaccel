@@ -52,19 +52,17 @@ func writeTemplate(t *testing.T, name, templateString, destination string, data 
 	tmpl, err := template.New(name).Parse(templateString)
 	require.NoError(t, err)
 
-	file, err := os.Create(destination)
+	file, err := os.Create(destination) //nolint:gosec
 	require.NoError(t, err)
 	defer func() { require.NoError(t, file.Close()) }()
 
 	require.NoError(t, tmpl.Execute(file, data))
 }
 
-func preparePodmanIsolation(
-	t *testing.T, workdir, serverURL, registryName string,
-) ([]string, func() error) {
+func preparePodmanIsolation(t *testing.T, workdir, serverURL, registryName string) []string {
 	t.Helper()
 
-	require.NoError(t, os.MkdirAll(workdir, 0o755))
+	require.NoError(t, os.MkdirAll(workdir, 0o750))
 
 	registriesConf := path.Join(workdir, "registries.conf")
 	storageConf := path.Join(workdir, "storage.conf")
@@ -93,12 +91,17 @@ rootless_storage_path="{{.}}"`,
 		dataPath,
 	)
 
+	t.Cleanup(func() {
+		require.NoError(
+			t,
+			exec.Command("podman", "unshare", "rm", "-rf", dataPath).Run(), //nolint:gosec
+		)
+	})
+
 	return []string{
-			"CONTAINERS_REGISTRIES_CONF=" + registriesConf,
-			"CONTAINERS_STORAGE_CONF=" + storageConf,
-		}, func() error {
-			return exec.Command("podman", "unshare", "rm", "-rf", dataPath).Run()
-		}
+		"CONTAINERS_REGISTRIES_CONF=" + registriesConf,
+		"CONTAINERS_STORAGE_CONF=" + storageConf,
+	}
 }
 
 func TestDownloadImageWithPodman(t *testing.T) {
@@ -127,13 +130,10 @@ func TestDownloadImageWithPodman(t *testing.T) {
 			defer server.Close()
 
 			// Generate the registry configuration
-			env, cleanup := preparePodmanIsolation(
+			env := preparePodmanIsolation(
 				t, path.Join(t.TempDir(), "podman"), server.URL, testcase.registry)
-			defer func() {
-				require.NoError(t, cleanup())
-			}()
 
-			cmd := exec.Command("podman", "pull", testcase.image)
+			cmd := exec.Command("podman", "pull", testcase.image) //nolint:gosec
 			cmd.Env = append(cmd.Env, env...)
 			output, err := cmd.CombinedOutput()
 			require.NoErrorf(t, err, "Running podman failed:\n%s", output)

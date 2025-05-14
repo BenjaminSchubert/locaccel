@@ -31,7 +31,7 @@ func newLoggingMiddleware(handler http.Handler, logger *zerolog.Logger) http.Han
 			level = zerolog.WarnLevel
 		}
 
-		l := hlog.FromRequest(req).WithLevel(level)
+		l := hlog.FromRequest(req).WithLevel(level) //nolint:zerologlint
 		if ua := req.Header.Get("User-Agent"); ua != "" {
 			l = l.Str("usage-agent", ua)
 		}

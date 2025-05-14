@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	stdlog "log"
 	"net/http"
@@ -28,7 +29,7 @@ type Server struct {
 	logger  *zerolog.Logger
 }
 
-func New(conf config.Config, client *httpclient.Client, logger *zerolog.Logger) *Server {
+func New(conf *config.Config, client *httpclient.Client, logger *zerolog.Logger) *Server {
 	srv := Server{logger: logger}
 
 	for _, registry := range conf.OciRegistries {
@@ -52,7 +53,7 @@ func (s *Server) ListenAndServe() error {
 		go func() {
 			srv.logger.Info().Str("address", srv.server.Addr).Msg("Starting server")
 			err := srv.server.ListenAndServe()
-			if err != http.ErrServerClosed {
+			if !errors.Is(err, http.ErrServerClosed) {
 				srv.logger.Error().Err(err).Msg("Server didn't come up properly")
 				errChan <- err
 			}
@@ -96,7 +97,7 @@ func (s *Server) ListenAndServe() error {
 }
 
 func setupOciRegistry(
-	conf config.Config,
+	conf *config.Config,
 	registry config.OciRegistry,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
@@ -119,7 +120,7 @@ func setupOciRegistry(
 	}
 }
 
-func setupAdminInterface(conf config.Config, logger *zerolog.Logger) serverInfo {
+func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo {
 	log := logger.With().Str("service", "admin").Logger()
 
 	handler := http.NewServeMux()

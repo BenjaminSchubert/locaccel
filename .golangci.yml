@@ -16,8 +16,31 @@ formatters:
 
 linters:
   enable:
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
     - depguard
+    - dupl
+    - durationcheck
+    - err113
+    - errname
+    - exhaustive
+    - gocritic
+    - gosec
+    - noctx
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - tagalign
+    - testifylint
+    - thelper
+    - unconvert
     - unused
+    - usetesting
+    - wastedassign
+    - zerologlint
   settings:
     depguard:
       rules:
@@ -25,3 +48,8 @@ linters:
           deny:
             - pkg: "github.com/rs/zerolog/log"
               desc: use an explicit logger
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - httpNoBody
+        - whyNoLint

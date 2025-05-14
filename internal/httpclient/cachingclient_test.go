@@ -68,6 +68,8 @@ func getAllEntriesInDB(
 }
 
 func getAllEntriesInFileCache(t *testing.T, cacheRoot string) []string {
+	t.Helper()
+
 	cachePath := path.Join(cacheRoot, "cache")
 	files, err := filepath.Glob(path.Join(cachePath, "*", "*"))
 	require.NoError(t, err)
@@ -111,7 +113,7 @@ func validateCache(
 	assert.Equal(t, expectedFiles, getAllEntriesInFileCache(t, cacheRoot))
 }
 
-func setup(t *testing.T) (*Client, func(map[string][]cachedResponse)) {
+func setup(t *testing.T) (client *Client, valCache func(map[string][]cachedResponse)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
@@ -133,7 +135,7 @@ func makeRequest(
 	client *Client,
 	method, url string,
 	headers http.Header,
-) (*http.Response, string) {
+) (resp *http.Response, body string) {
 	t.Helper()
 
 	req, err := http.NewRequest(method, url, nil)
@@ -143,14 +145,14 @@ func makeRequest(
 
 	req.Header = headers
 
-	resp, err := client.Do(req)
+	resp, err = client.Do(req)
 	require.NoError(t, err)
 
-	body, err := io.ReadAll(resp.Body)
+	bodyB, err := io.ReadAll(resp.Body)
 	assert.NoError(t, resp.Body.Close())
 	require.NoError(t, err)
 
-	return resp, string(body)
+	return resp, string(bodyB)
 }
 
 func TestClientForwardsNonCacheableMethods(t *testing.T) {
@@ -166,7 +168,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodPost, srv.URL, nil)
+	resp, body := makeRequest(t, client, http.MethodPost, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "hello!", body)
 
@@ -186,12 +188,11 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 	require.NoError(t, err)
 
-	_, err = client.Do(req)
+	_, err = client.Do(req) //nolint:bodyclose
 	require.ErrorContains(t, err, "EOF")
-
 	require.NoError(t, client.Close())
 
 	validateCache(map[string][]cachedResponse{})
@@ -209,7 +210,7 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
@@ -230,7 +231,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
@@ -264,7 +265,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	wasCalled := false
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.False(t, wasCalled, "The service did not serve the request from cache")
+		assert.False(t, wasCalled, "The service did not serve the request from cache")
 		w.Header().Add("Cache-Control", "public, max-age=20")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -273,7 +274,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 
 	date := resp.Header["Date"]
 
@@ -291,7 +292,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	)
 
 	// Second Query
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -354,16 +355,16 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	}
 
 	// Initial Query
-	resp1 := makeQuery(1, nil)
+	resp1 := makeQuery(1, nil) //nolint:bodyclose
 
 	// Second Query, should not be cached
-	resp2 := makeQuery(2, nil)
+	resp2 := makeQuery(2, nil) //nolint:bodyclose
 
 	// First query again should hit the cache
-	makeQuery(1, resp1.Header["Date"])
+	makeQuery(1, resp1.Header["Date"]) //nolint:bodyclose
 
 	// Second query again should hit the cache
-	makeQuery(2, resp2.Header["Date"])
+	makeQuery(2, resp2.Header["Date"]) //nolint:bodyclose
 
 	require.Equal(t, 2, count, "The API was hit %d times instead of 2", count)
 
@@ -428,7 +429,7 @@ func TestValidationEtag(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// First request should get the answer
-	resp1, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{})
+	resp1, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{}) //nolint:bodyclose
 	assert.Equal(t, 200, resp1.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -444,7 +445,7 @@ func TestValidationEtag(t *testing.T) {
 	)
 
 	// Second request should revalidate
-	resp2, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{})
+	resp2, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{}) //nolint:bodyclose
 	assert.Equal(t, 200, resp2.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -506,7 +507,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 
 	date := resp.Header["Date"]
 
@@ -524,7 +525,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	)
 
 	// Second query getting a 5XX, should be served by the cache
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -542,7 +543,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	// Third Query, should still be served by the cache
 	srv.Close()
 
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil)
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(

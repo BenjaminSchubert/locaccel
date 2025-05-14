@@ -23,6 +23,8 @@ func TestNormalizeVaryHeaders(t *testing.T) {
 		{"multiple-vary", http.Header{"Vary": []string{"Count", "Value"}}, map[string]struct{}{"Count": {}, "Value": {}}},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+
 			normalized := normalizeVaryHeaders(tc.headers)
 			require.Equal(t, tc.expected, normalized)
 		})
@@ -55,6 +57,8 @@ func TestMatchVaryHeaders(t *testing.T) {
 		{"vary-matching", http.Header{"Foo": []string{"one"}, "Bar": []string{"two"}}, http.Header{"Foo": []string{"one"}, "Baz": nil}, true},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+
 			match := MatchVaryHeaders(tc.reqHeaders, tc.varyHeaders, testutils.TestLogger(t))
 			require.Equal(t, tc.expected, match)
 		})

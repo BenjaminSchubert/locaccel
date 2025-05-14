@@ -13,15 +13,20 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/teereader"
 )
 
-var ErrMaxSizedReached = errors.New("max sized reached")
+var (
+	errMaxSizedReached = errors.New("max sized reached")
+	errTest            = errors.New("test error")
+)
 
 type MaxSizeWriter struct{}
 
 func (m MaxSizeWriter) Write(p []byte) (n int, err error) {
-	return 0, ErrMaxSizedReached
+	return 0, errMaxSizedReached
 }
 
 func TestReadCopiesCorrectly(t *testing.T) {
+	t.Parallel()
+
 	data := "hello world!"
 
 	src := bytes.NewBufferString(data)
@@ -45,19 +50,20 @@ func TestReadCopiesCorrectly(t *testing.T) {
 }
 
 func TestReadReportsErrors(t *testing.T) {
-	testErr := errors.New("Test error")
-	src := iotest.ErrReader(testErr)
+	t.Parallel()
+
+	src := iotest.ErrReader(errTest)
 	writer := bytes.NewBufferString("")
 
 	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
-		assert.NoError(t, writeErr)
-		assert.ErrorIs(t, testErr, readErr)
+		require.NoError(t, writeErr)
+		assert.ErrorIs(t, errTest, readErr)
 
 		return nil
 	})
 
 	output, err := io.ReadAll(reader)
-	require.ErrorIs(t, testErr, err)
+	require.ErrorIs(t, errTest, err)
 	require.Equal(t, []byte{}, output)
 
 	err = reader.Close()
@@ -65,6 +71,8 @@ func TestReadReportsErrors(t *testing.T) {
 }
 
 func TestReaderHandlesPartialReads(t *testing.T) {
+	t.Parallel()
+
 	data := "hello world!"
 
 	src := iotest.HalfReader(bytes.NewBufferString(data))
@@ -85,14 +93,16 @@ func TestReaderHandlesPartialReads(t *testing.T) {
 }
 
 func TestReadsAllEvenOnWriteError(t *testing.T) {
+	t.Parallel()
+
 	data := "hello world!"
 
 	src := bytes.NewBufferString(data)
 	writer := MaxSizeWriter{}
 
 	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
-		assert.NoError(t, readErr)
-		assert.ErrorIs(t, writeErr, ErrMaxSizedReached)
+		require.NoError(t, readErr)
+		assert.ErrorIs(t, writeErr, errMaxSizedReached)
 
 		return nil
 	})

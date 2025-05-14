@@ -37,7 +37,7 @@ func TestCanParseValidHeaders(t *testing.T) {
 			t.Parallel()
 
 			result, err := httpcaching.ParseCacheControlDirective([]string{tc.header})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})
 	}
@@ -65,7 +65,7 @@ func TestIgnoreInvalidDirective(t *testing.T) {
 	t.Parallel()
 
 	result, err := httpcaching.ParseCacheControlDirective([]string{"unknown"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, httpcaching.CacheControlResponseDirective{}, result)
 }
 
@@ -75,7 +75,7 @@ func TestCanComposeMultipleHeaders(t *testing.T) {
 	result, err := httpcaching.ParseCacheControlDirective(
 		[]string{"max-age=123", "must-revalidate, no-cache"},
 	)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(
 		t,
 		httpcaching.CacheControlResponseDirective{

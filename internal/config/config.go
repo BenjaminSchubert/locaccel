@@ -15,7 +15,7 @@ type Config struct {
 	OciRegistries   []OciRegistry
 }
 
-func New() Config {
+func New() *Config {
 	conf := Config{
 		Host:           "localhost",
 		CachePath:      "_cache",
@@ -31,5 +31,5 @@ func New() Config {
 		conf.EnableProfiling = true
 	}
 
-	return conf
+	return &conf
 }

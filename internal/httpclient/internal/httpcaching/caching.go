@@ -47,7 +47,7 @@ func IsCacheable(r *http.Response) bool {
 		return false
 	}
 
-	cacheControl, err := ParseCacheControlDirective(r.Header.Values("cache-control"))
+	cacheControl, err := ParseCacheControlDirective(r.Header.Values("Cache-Control"))
 	if err != nil {
 		// FIXME: log
 		return false

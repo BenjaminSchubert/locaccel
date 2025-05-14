@@ -194,7 +194,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 			logger.Debug().Msg("serving response from cache")
 			return resp, nil
 		}
-	} else if err != database.ErrKeyNotFound {
+	} else if !errors.Is(err, database.ErrKeyNotFound) {
 		logger.Debug().Err(err).Msg("unable to retrieve entry from database, no response fresh")
 	}
 
@@ -282,12 +282,12 @@ func (c *Client) addConditionalRequestInformation(
 func (c *Client) forwardRequest(
 	req *http.Request,
 	logger *zerolog.Logger,
-) (*http.Response, time.Time, time.Time, error) {
+) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
 	removeHopByHopHeaders(req.Header)
 
-	timeAtRequestCreated := time.Now().UTC()
-	resp, err := c.client.Do(req)
-	timeAtResponseReceived := time.Now().UTC()
+	timeAtRequestCreated = time.Now().UTC()
+	resp, err = c.client.Do(req)
+	timeAtResponseReceived = time.Now().UTC()
 
 	if err != nil {
 		return resp, timeAtRequestCreated, timeAtResponseReceived, err
@@ -353,42 +353,44 @@ func (c *Client) updateCache(
 ) (*http.Response, error) {
 	if etag := resp.Header.Get("Etag"); etag != "" {
 		for _, cachedResp := range dbEntry.Value {
-			if cachedResp.Headers.Get("Etag") == etag {
-				for key, val := range resp.Header {
-					if key != "Content-Length" {
-						cachedResp.Headers[key] = val
-					}
-				}
-
-				if err := c.db.Save(cacheKey, dbEntry); err != nil {
-					logger.Error().Err(err).Msg("Error updating the entry in the cache")
-				}
-
-				body, err := c.cache.Open(cachedResp.ContentHash, logger)
-				if err != nil {
-					// FIXME: delete entry, it's useless now
-					panic("Unable to serve cached entry")
-				}
-				if err := resp.Body.Close(); err != nil {
-					logger.Error().Err(err).Msg("Error closing upstream request body")
-				}
-
-				resp := &http.Response{
-					StatusCode: http.StatusOK,
-					Body:       body,
-					Header:     cachedResp.Headers.Clone(),
-				}
-
-				age := httpcaching.GetCurrentAge(
-					resp.Header,
-					timeAtRequestCreated,
-					timeAtResponseReceived,
-					logger,
-				)
-				resp.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
-
-				return resp, nil
+			if cachedResp.Headers.Get("Etag") != etag {
+				continue
 			}
+
+			for key, val := range resp.Header {
+				if key != "Content-Length" {
+					cachedResp.Headers[key] = val
+				}
+			}
+
+			if err := c.db.Save(cacheKey, dbEntry); err != nil {
+				logger.Error().Err(err).Msg("Error updating the entry in the cache")
+			}
+
+			body, err := c.cache.Open(cachedResp.ContentHash, logger)
+			if err != nil {
+				// FIXME: delete entry, it's useless now
+				panic("Unable to serve cached entry")
+			}
+			if err := resp.Body.Close(); err != nil {
+				logger.Error().Err(err).Msg("Error closing upstream request body")
+			}
+
+			resp := &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       body,
+				Header:     cachedResp.Headers.Clone(),
+			}
+
+			age := httpcaching.GetCurrentAge(
+				resp.Header,
+				timeAtRequestCreated,
+				timeAtResponseReceived,
+				logger,
+			)
+			resp.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
+
+			return resp, nil
 		}
 	}
 

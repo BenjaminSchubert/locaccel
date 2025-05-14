@@ -12,6 +12,8 @@ import (
 )
 
 func TestGetFreshness(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		description string
 		headers     http.Header
@@ -50,6 +52,8 @@ func TestGetFreshness(t *testing.T) {
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+
 			cacheControl, err := ParseCacheControlDirective(tc.headers["Cache-Control"])
 			require.NoError(t, err)
 			freshness := getFreshnessLifetime(tc.headers, cacheControl, testutils.TestLogger(t))
@@ -59,6 +63,8 @@ func TestGetFreshness(t *testing.T) {
 }
 
 func TestGetCurrentAge(t *testing.T) {
+	t.Parallel()
+
 	age := GetCurrentAge(
 		http.Header{
 			"Age":  []string{"60"},
@@ -72,6 +78,8 @@ func TestGetCurrentAge(t *testing.T) {
 }
 
 func TestIsFresh(t *testing.T) {
+	t.Parallel()
+
 	age, isFresh := IsFresh(
 		http.Header{
 			"Age": []string{"60"},
@@ -85,10 +93,12 @@ func TestIsFresh(t *testing.T) {
 		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)
-	assert.Equal(t, true, isFresh)
+	assert.True(t, isFresh)
 }
 
 func TestIsNotFresh(t *testing.T) {
+	t.Parallel()
+
 	age, isFresh := IsFresh(
 		http.Header{
 			"Age": []string{"60"},
@@ -102,5 +112,5 @@ func TestIsNotFresh(t *testing.T) {
 		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)
-	assert.Equal(t, false, isFresh)
+	assert.False(t, isFresh)
 }
