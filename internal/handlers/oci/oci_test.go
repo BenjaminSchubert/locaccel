@@ -114,6 +114,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 	}{
 		{"docker.io", "https://registry-1.docker.io", "docker.io/alpine"},
 		{"gcr.io", "https://gcr.io", "gcr.io/distroless/static"},
+		{"quay.io", "https://quay.io", "quay.io/navidys/prometheus-podman-exporter"},
 	} {
 		t.Run(testcase.registry, func(t *testing.T) {
 			t.Parallel()
@@ -132,7 +133,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 				require.NoError(t, cleanup())
 			}()
 
-			cmd := exec.Command("podman", "pull", testcase.image) //nolint:gosec
+			cmd := exec.Command("podman", "pull", testcase.image)
 			cmd.Env = append(cmd.Env, env...)
 			output, err := cmd.CombinedOutput()
 			require.NoErrorf(t, err, "Running podman failed:\n%s", output)
