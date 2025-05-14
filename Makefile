@@ -1,8 +1,8 @@
 GOLANGCI_LINT_VERSION = 2.1.6
 
-.PHONY: all build lint fix test
+.PHONY: all build lint fix test gopls-check
 
-all: build lint test
+all: build lint gopls-check test
 
 build:
 	go build -trimpath -o build/locaccel ./cmd/locaccel
@@ -21,6 +21,8 @@ test:
 	go test -coverprofile .coverage ./...
 	go tool cover -func .coverage
 
+gopls-check:
+	@res=$$(find . -name "*.go" -exec gopls check {} \;); echo $${res} && [[ -z $${res} ]]
 
 .cache/bin/golangci-lint:
 	@mkdir -p $(dir $@)

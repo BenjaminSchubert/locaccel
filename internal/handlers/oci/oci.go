@@ -2,6 +2,7 @@ package oci
 
 import (
 	"io"
+	"maps"
 	"net/http"
 
 	"github.com/rs/zerolog/hlog"
@@ -16,7 +17,7 @@ func RegisterHandler(registry string, handler *http.ServeMux, client *httpclient
 		if err != nil {
 			hlog.FromRequest(r).Panic().Err(err).Msg("Error generating new upstream request")
 		}
-		copyHeaders(r.Header, upstreamReq.Header)
+		maps.Copy(upstreamReq.Header, r.Header)
 
 		forward(client, upstreamReq, w, r)
 	})
@@ -44,16 +45,10 @@ func forward(
 		}
 	}()
 
-	copyHeaders(resp.Header, w.Header())
+	maps.Copy(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
 		hlog.FromRequest(originalRequest).Panic().Err(err).Msg("Error sending response to client")
-	}
-}
-
-func copyHeaders(src, dest http.Header) {
-	for key, vals := range src {
-		dest[key] = vals
 	}
 }
