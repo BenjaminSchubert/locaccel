@@ -1,6 +1,11 @@
 package config
 
-import "os"
+import (
+	"os"
+
+	"github.com/rs/zerolog"
+	"gopkg.in/yaml.v3"
+)
 
 type OciRegistry struct {
 	Remote string
@@ -9,27 +14,48 @@ type OciRegistry struct {
 
 type Config struct {
 	Host            string
-	CachePath       string
-	AdminInterface  string
-	EnableProfiling bool
-	OciRegistries   []OciRegistry
+	CachePath       string        `yaml:"cache"`
+	AdminInterface  string        `yaml:"admin_interface"`
+	EnableProfiling bool          `yaml:"profiling"`
+	LogLevel        string        `yaml:"log_level"`
+	OciRegistries   []OciRegistry `yaml:"oci_registries"`
 }
 
-func New() *Config {
-	conf := Config{
+func getBaseConfig() *Config {
+	return &Config{
 		Host:           "localhost",
-		CachePath:      "_cache",
+		CachePath:      "_cache/",
 		AdminInterface: "localhost:3130",
-		OciRegistries: []OciRegistry{
-			{"https://registry-1.docker.io", 3131},
-			{"https://ghcr.io", 3132},
-			{"https://quay.io", 3133},
-		},
+		LogLevel:       zerolog.LevelInfoValue,
+	}
+}
+
+func Parse(configPath string) (*Config, error) {
+	c := getBaseConfig()
+
+	fp, err := os.Open(configPath) //nolint:gosec
+	if err != nil {
+		return c, err
+	}
+
+	decoder := yaml.NewDecoder(fp)
+	decoder.KnownFields(true)
+	err = decoder.Decode(&c)
+
+	return c, err
+}
+
+func Default() *Config {
+	conf := getBaseConfig()
+	conf.OciRegistries = []OciRegistry{
+		{"https://registry-1.docker.io", 3131},
+		{"https://ghcr.io", 3132},
+		{"https://quay.io", 3133},
 	}
 
 	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
 		conf.EnableProfiling = true
 	}
 
-	return &conf
+	return conf
 }

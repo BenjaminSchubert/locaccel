@@ -2,7 +2,10 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/rs/zerolog"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -11,9 +14,31 @@ import (
 )
 
 func main() {
-	logger := logging.CreateLogger()
+	logger := logging.CreateLogger(zerolog.WarnLevel)
 
-	conf := config.New()
+	configPath, configPathSet := os.LookupEnv("LOCACCEL_CONFIG_PATH")
+	if !configPathSet {
+		configPath = "./locaccel.yaml"
+	}
+
+	conf, err := config.Parse(configPath)
+	if err != nil {
+		if configPathSet {
+			logger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
+		}
+		conf = config.Default()
+	}
+
+	logLevel, err := zerolog.ParseLevel(conf.LogLevel)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
+	}
+	logger = logging.CreateLogger(logLevel)
+
+	if !configPathSet {
+		logger.Info().
+			Msg("locaccel.yaml not found and LOCACCEL_CONFIG_PATH not set: Using default configuration")
+	}
 
 	client := &http.Client{
 		Timeout: 5 * time.Minute,
