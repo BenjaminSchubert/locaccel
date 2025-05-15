@@ -15,6 +15,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
+	"github.com/benjaminschubert/locaccel/internal/handlers/proxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/pypi"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
@@ -39,6 +40,10 @@ func New(conf *config.Config, client *httpclient.Client, logger *zerolog.Logger)
 
 	for _, registry := range conf.PyPIRegistries {
 		srv.servers = append(srv.servers, setupPypiRegistry(conf, registry, client, logger))
+	}
+
+	for _, proxy := range conf.Proxies {
+		srv.servers = append(srv.servers, setupProxy(conf, proxy, client, logger))
 	}
 
 	if conf.AdminInterface != "" {
@@ -127,6 +132,20 @@ func setupPypiRegistry(
 	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client)
 
 	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+}
+
+func setupProxy(
+	conf *config.Config,
+	proxyConf config.Proxy,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+) serverInfo {
+	log := logger.With().Str("service", "proxy").Logger()
+
+	handler := http.NewServeMux()
+	proxy.RegisterHandler(proxyConf.AllowedUpstreams, handler, client)
+
+	return createServer(fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port), handler, &log)
 }
 
 func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo {

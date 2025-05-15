@@ -18,6 +18,11 @@ type PyPIRegistry struct {
 	Port     uint16
 }
 
+type Proxy struct {
+	AllowedUpstreams []string `yaml:"allowed_upstreams"`
+	Port             uint16
+}
+
 type Config struct {
 	Host            string
 	CachePath       string         `yaml:"cache"`
@@ -26,6 +31,7 @@ type Config struct {
 	LogLevel        string         `yaml:"log_level"`
 	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
 	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
+	Proxies         []Proxy
 }
 
 func getBaseConfig() *Config {
@@ -62,6 +68,15 @@ func Default() *Config {
 	conf.PyPIRegistries = []PyPIRegistry{
 		{"https://pypi.org/", "https://files.pythonhosted.org", 3134},
 	}
+	conf.Proxies = []Proxy{{
+		[]string{
+			// Debian
+			"deb.debian.org",
+			// Ubuntu
+			"archive.ubuntu.com", "security.ubuntu.com",
+		},
+		3142,
+	}}
 
 	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
 		conf.EnableProfiling = true

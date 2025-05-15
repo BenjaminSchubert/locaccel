@@ -1,6 +1,10 @@
 GOLANGCI_LINT_VERSION = 2.1.6
+AIR_VERSION = 1.61.7
 
-.PHONY: all build lint fix test gopls-check
+.PHONY: all build lint fix test gopls-check start
+
+start: .cache/bin/air
+	air --tmp_dir .cache/tmp --build.cmd "go build -o ./build/locaccel cmd/locaccel/locaccel.go" --build.bin "./build/locaccel"
 
 all: build lint gopls-check test
 
@@ -26,5 +30,10 @@ gopls-check:
 
 .cache/bin/golangci-lint:
 	@mkdir -p $(dir $@)
-	curl -L https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64.tar.gz | tar -xzf - --anchored --wildcards '*golangci-lint' --transform='s/.*/golangci-lint/'
+	curl -L https://github.com/golangci/golangci-lint/releases/download/v${GOLANGCI_LINT_VERSION}/golangci-lint-${GOLANGCI_LINT_VERSION}-linux-amd64.tar.gz | tar -xzf - -C $(dir $@) --anchored --wildcards '*golangci-lint' --transform='s/.*/golangci-lint/'
+	chmod +x $@
+
+.cache/bin/air:
+	@mkdir -p $(dir $@)
+	curl -L https://github.com/air-verse/air/releases/download/v${AIR_VERSION}/air_${AIR_VERSION}_linux_amd64.tar.gz | tar -xzf - -C $(dir $@) -- air
 	chmod +x $@
