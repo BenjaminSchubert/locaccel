@@ -15,6 +15,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
+	"github.com/benjaminschubert/locaccel/internal/handlers/pypi"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
 )
@@ -34,6 +35,10 @@ func New(conf *config.Config, client *httpclient.Client, logger *zerolog.Logger)
 
 	for _, registry := range conf.OciRegistries {
 		srv.servers = append(srv.servers, setupOciRegistry(conf, registry, client, logger))
+	}
+
+	for _, registry := range conf.PyPIRegistries {
+		srv.servers = append(srv.servers, setupPypiRegistry(conf, registry, client, logger))
 	}
 
 	if conf.AdminInterface != "" {
@@ -102,22 +107,26 @@ func setupOciRegistry(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 ) serverInfo {
+	log := logger.With().Str("service", "oci["+registry.Upstream+"]").Logger()
+
 	handler := http.NewServeMux()
-	oci.RegisterHandler(registry.Remote, handler, client)
-	handler.HandleFunc("/", handlers.NotImplemented)
+	oci.RegisterHandler(registry.Upstream, handler, client)
 
-	log := logger.With().Str("service", "oci["+registry.Remote+"]").Logger()
+	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+}
 
-	return serverInfo{
-		&http.Server{
-			Addr:         fmt.Sprintf("%s:%d", conf.Host, registry.Port),
-			Handler:      middleware.ApplyAllMiddlewares(handler, &log),
-			ReadTimeout:  10 * time.Second,
-			WriteTimeout: 5 * time.Minute,
-			ErrorLog:     stdlog.New(&log, "", 0),
-		},
-		&log,
-	}
+func setupPypiRegistry(
+	conf *config.Config,
+	registry config.PyPIRegistry,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+) serverInfo {
+	log := logger.With().Str("service", "pypi["+registry.Upstream+"]").Logger()
+
+	handler := http.NewServeMux()
+	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client)
+
+	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
 }
 
 func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo {
@@ -132,16 +141,20 @@ func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo
 		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
 	}
 
+	return createServer(conf.AdminInterface, handler, &log)
+}
+
+func createServer(address string, handler *http.ServeMux, log *zerolog.Logger) serverInfo {
 	handler.HandleFunc("/", handlers.NotImplemented)
 
 	return serverInfo{
 		&http.Server{
-			Addr:         conf.AdminInterface,
-			Handler:      middleware.ApplyAllMiddlewares(handler, &log),
+			Addr:         address,
+			Handler:      middleware.ApplyAllMiddlewares(handler, log),
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 5 * time.Minute,
-			ErrorLog:     stdlog.New(&log, "", 0),
+			ErrorLog:     stdlog.New(log, "", 0),
 		},
-		&log,
+		log,
 	}
 }

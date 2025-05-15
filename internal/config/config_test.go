@@ -27,8 +27,12 @@ admin_interface: localhost:8192
 profiling: true
 log_level: error
 oci_registries:
-  - remote: https://registry-1.docker.io
-    port: 1234`),
+  - upstream: https://registry-1.docker.io
+    port: 1234
+pypi_registries:
+  - upstream: https://pypi.org
+    cdn: https://files.pythonhosted.org
+    port: 1235`),
 			0o600,
 		),
 	)
@@ -44,7 +48,10 @@ oci_registries:
 			EnableProfiling: true,
 			LogLevel:        zerolog.LevelErrorValue,
 			OciRegistries: []config.OciRegistry{
-				{Remote: "https://registry-1.docker.io", Port: 1234},
+				{Upstream: "https://registry-1.docker.io", Port: 1234},
+			},
+			PyPIRegistries: []config.PyPIRegistry{
+				{Upstream: "https://pypi.org", CDN: "https://files.pythonhosted.org", Port: 1235},
 			},
 		},
 		conf,

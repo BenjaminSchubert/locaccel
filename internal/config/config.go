@@ -8,17 +8,24 @@ import (
 )
 
 type OciRegistry struct {
-	Remote string
-	Port   uint16
+	Upstream string
+	Port     uint16
+}
+
+type PyPIRegistry struct {
+	Upstream string
+	CDN      string
+	Port     uint16
 }
 
 type Config struct {
 	Host            string
-	CachePath       string        `yaml:"cache"`
-	AdminInterface  string        `yaml:"admin_interface"`
-	EnableProfiling bool          `yaml:"profiling"`
-	LogLevel        string        `yaml:"log_level"`
-	OciRegistries   []OciRegistry `yaml:"oci_registries"`
+	CachePath       string         `yaml:"cache"`
+	AdminInterface  string         `yaml:"admin_interface"`
+	EnableProfiling bool           `yaml:"profiling"`
+	LogLevel        string         `yaml:"log_level"`
+	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
+	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
 }
 
 func getBaseConfig() *Config {
@@ -51,6 +58,9 @@ func Default() *Config {
 		{"https://registry-1.docker.io", 3131},
 		{"https://ghcr.io", 3132},
 		{"https://quay.io", 3133},
+	}
+	conf.PyPIRegistries = []PyPIRegistry{
+		{"https://pypi.org/", "https://files.pythonhosted.org", 3134},
 	}
 
 	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
