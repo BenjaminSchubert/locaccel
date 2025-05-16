@@ -76,22 +76,24 @@ func (d *Database[T, TPtr]) Get(key string) (*Entry[T], error) {
 			return fmt.Errorf("unexpected error loading key: %w", err)
 		}
 
-		val, err := item.ValueCopy(nil)
+		err = item.Value(func(val []byte) error {
+			var value TPtr = new(T)
+			if _, err := value.UnmarshalMsg(val); err != nil {
+				return fmt.Errorf(
+					"entry in the database is not of the correct format, this should not happen: %w",
+					err,
+				)
+			}
+
+			entry.Value = *value
+			entry.version = item.Version()
+
+			return nil
+		})
 		if err != nil {
 			return fmt.Errorf("unexpected error extracting value: %w", err)
 		}
 
-		var value TPtr = new(T)
-		_, err = value.UnmarshalMsg(val)
-		if err != nil {
-			return fmt.Errorf(
-				"entry in the database is not of the correct format, this should not happen: %w",
-				err,
-			)
-		}
-
-		entry.Value = *value
-		entry.version = item.Version()
 		return nil
 	})
 	if err != nil {
