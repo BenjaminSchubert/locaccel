@@ -7,13 +7,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/database"
+	"github.com/benjaminschubert/locaccel/internal/database/internal/dbtestutils"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func TestRetrieveNotFound(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -25,38 +26,38 @@ func TestRetrieveNotFound(t *testing.T) {
 func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	err = db.Save("key", &database.Entry[string]{Value: "hello"})
+	err = db.New("key", dbtestutils.TestObj{Value: "hello"})
 	require.NoError(t, err)
 
 	entry, err := db.Get("key")
 	require.NoError(t, err)
 
-	assert.Equal(t, "hello", entry.Value)
+	assert.Equal(t, dbtestutils.TestObj{Value: "hello"}, entry.Value)
 }
 
 func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[string](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	err = db.Save("key", &database.Entry[string]{Value: "hello"})
+	err = db.New("key", dbtestutils.TestObj{Value: "hello"})
 	require.NoError(t, err)
 
 	// First retrieve
 	entry, err := db.Get("key")
 	require.NoError(t, err)
-	entry.Value = "world"
+	entry.Value = dbtestutils.TestObj{}
 
 	// Second retrieve and update
 	entryUpdated, err := db.Get("key")
 	require.NoError(t, err)
-	entryUpdated.Value = "hi"
+	entryUpdated.Value = dbtestutils.TestObj{}
 	err = db.Save("key", entryUpdated)
 	require.NoError(t, err)
 

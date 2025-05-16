@@ -1,8 +1,6 @@
 package httpclient
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,7 +26,7 @@ func getAllEntriesInDB(
 	t *testing.T,
 	cacheRoot string,
 	logger *zerolog.Logger,
-) map[string][]cachedResponse {
+) map[string]CachedResponses {
 	t.Helper()
 
 	db, err := badger.Open(
@@ -38,7 +36,7 @@ func getAllEntriesInDB(
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, db.Close()) })
 
-	cachedResponses := map[string][]cachedResponse{}
+	cachedResponses := map[string]CachedResponses{}
 
 	err = db.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -51,8 +49,8 @@ func getAllEntriesInDB(
 				return err
 			}
 
-			entry := []cachedResponse{}
-			err = gob.NewDecoder(bytes.NewBuffer(val)).Decode(&entry)
+			entry := CachedResponses{}
+			_, err = entry.UnmarshalMsg(val)
 			if err != nil {
 				return err
 			}
@@ -86,7 +84,7 @@ func validateCache(
 	t *testing.T,
 	cacheRoot string,
 	logger *zerolog.Logger,
-	expected map[string][]cachedResponse,
+	expected map[string]CachedResponses,
 	startTime time.Time,
 ) {
 	t.Helper()
@@ -113,7 +111,7 @@ func validateCache(
 	assert.Equal(t, expectedFiles, getAllEntriesInFileCache(t, cacheRoot))
 }
 
-func setup(t *testing.T) (client *Client, valCache func(map[string][]cachedResponse)) {
+func setup(t *testing.T) (client *Client, valCache func(map[string]CachedResponses)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
@@ -125,7 +123,7 @@ func setup(t *testing.T) (client *Client, valCache func(map[string][]cachedRespo
 
 	currentTime := time.Now()
 
-	return client, func(expected map[string][]cachedResponse) {
+	return client, func(expected map[string]CachedResponses) {
 		validateCache(t, cachePath, logger, expected, currentTime)
 	}
 }
@@ -174,7 +172,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{})
+	validateCache(map[string]CachedResponses{})
 }
 
 func TestClientDoesNotCachedErrors(t *testing.T) {
@@ -195,7 +193,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	require.ErrorContains(t, err, "EOF")
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{})
+	validateCache(map[string]CachedResponses{})
 }
 
 func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
@@ -216,7 +214,7 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{})
+	validateCache(map[string]CachedResponses{})
 }
 
 func TestClientCachesCacheableResponses(t *testing.T) {
@@ -237,7 +235,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{
+	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
 			{
 				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
@@ -370,7 +368,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{
+	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
 			{
 				"9dea94da2f7eb6112119b81792afb3bc0f18d19d0b6d5cc1ca3a51ebeef7b670",
@@ -464,7 +462,7 @@ func TestValidationEtag(t *testing.T) {
 
 	require.NoError(t, client.Close())
 
-	validateCache(map[string][]cachedResponse{
+	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
 			{
 				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",

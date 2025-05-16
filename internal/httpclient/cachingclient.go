@@ -20,18 +20,9 @@ import (
 
 var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
 
-type cachedResponse struct {
-	ContentHash            string
-	StatusCode             int
-	Headers                http.Header
-	VaryHeaders            http.Header
-	TimeAtRequestCreated   time.Time
-	TimeAtResponseReceived time.Time
-}
-
 type Client struct {
 	client *http.Client
-	db     *database.Database[[]cachedResponse]
+	db     *database.Database[CachedResponses, *CachedResponses]
 	cache  *filecache.FileCache
 }
 
@@ -47,7 +38,7 @@ func New(client *http.Client, cachePath string, logger *zerolog.Logger) (*Client
 		dbLogger = dbLogger.Level(zerolog.InfoLevel)
 	}
 
-	db, err := database.NewDatabase[[]cachedResponse](
+	db, err := database.NewDatabase[CachedResponses](
 		path.Join(cachePath, "db"),
 		&dbLogger,
 	)
@@ -68,10 +59,10 @@ func buildKey(req *http.Request) string {
 
 func (c *Client) selectResponseCandidates(
 	req *http.Request,
-	dbEntry *database.Entry[[]cachedResponse],
+	dbEntry *database.Entry[CachedResponses],
 	logger *zerolog.Logger,
-) []cachedResponse {
-	candidates := []cachedResponse{}
+) CachedResponses {
+	candidates := CachedResponses{}
 
 	for _, resp := range dbEntry.Value {
 		if httpcaching.MatchVaryHeaders(req.Header, resp.VaryHeaders, logger) {
@@ -83,10 +74,10 @@ func (c *Client) selectResponseCandidates(
 }
 
 func (c *Client) selectMostRecentCandidates(
-	candidates []cachedResponse,
+	candidates CachedResponses,
 	logger *zerolog.Logger,
-) []cachedResponse {
-	mostRecentCandidates := make([]cachedResponse, 0, 1)
+) CachedResponses {
+	mostRecentCandidates := make(CachedResponses, 0, 1)
 	maxDate := time.Time{}
 
 	for _, candidate := range candidates {
@@ -110,7 +101,7 @@ func (c *Client) selectMostRecentCandidates(
 }
 
 func (c *Client) serveFromCachedCandidates(
-	candidates []cachedResponse,
+	candidates CachedResponses,
 	forceStale bool,
 	logger *zerolog.Logger,
 ) *http.Response {
@@ -157,7 +148,7 @@ func (c *Client) serveFromCachedCandidates(
 
 func (c *Client) serveFromCache(
 	req *http.Request,
-	dbEntry *database.Entry[[]cachedResponse],
+	dbEntry *database.Entry[CachedResponses],
 	forceStale bool,
 	logger *zerolog.Logger,
 ) *http.Response {
@@ -256,7 +247,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 func (c *Client) addConditionalRequestInformation(
 	req *http.Request,
-	dbEntry *database.Entry[[]cachedResponse],
+	dbEntry *database.Entry[CachedResponses],
 ) bool {
 	// FIXME: add If-Not-Modified-Since
 
@@ -310,7 +301,7 @@ func (c *Client) setupIngestion(
 	resp *http.Response,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	cacheKey string,
-	dbEntry *database.Entry[[]cachedResponse],
+	dbEntry *database.Entry[CachedResponses],
 	logger *zerolog.Logger,
 ) io.ReadCloser {
 	return c.cache.SetupIngestion(
@@ -318,7 +309,7 @@ func (c *Client) setupIngestion(
 		func(hash string) {
 			var err error
 
-			cacheResp := cachedResponse{
+			cacheResp := CachedResponse{
 				hash,
 				resp.StatusCode,
 				resp.Header,
@@ -331,7 +322,7 @@ func (c *Client) setupIngestion(
 				dbEntry.Value = append(dbEntry.Value, cacheResp)
 				err = c.db.Save(cacheKey, dbEntry)
 			} else {
-				err = c.db.New(cacheKey, []cachedResponse{cacheResp})
+				err = c.db.New(cacheKey, CachedResponses{cacheResp})
 			}
 
 			if err != nil {
@@ -346,7 +337,7 @@ func (c *Client) setupIngestion(
 
 func (c *Client) updateCache(
 	cacheKey string,
-	dbEntry *database.Entry[[]cachedResponse],
+	dbEntry *database.Entry[CachedResponses],
 	resp *http.Response,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	logger *zerolog.Logger,

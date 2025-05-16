@@ -1,32 +1,36 @@
 GOLANGCI_LINT_VERSION = 2.1.6
 AIR_VERSION = 1.61.7
 
-.PHONY: all build lint fix test gopls-check start
+.PHONY: all build lint fix test gopls-check start generate
 
 start: .cache/bin/air
 	air --tmp_dir .cache/tmp --build.cmd "go build -o ./build/locaccel cmd/locaccel/locaccel.go" --build.bin "./build/locaccel"
 
 all: build lint gopls-check test
 
-build:
+build: generate
 	go build -trimpath -o build/locaccel ./cmd/locaccel
 
-lint: .cache/bin/golangci-lint
+lint: .cache/bin/golangci-lint generate
 	go mod tidy -diff
 	$< run ./...
 	$< fmt --diff-colored
 
-fix: .cache/bin/golangci-lint
+fix: .cache/bin/golangci-lint generate
 	go mod tidy
 	$< run --fix ./...
 	$< fmt
 
-test:
+test: generate
 	go test -coverprofile .coverage ./...
 	go tool cover -func .coverage
 
 gopls-check:
-	@res=$$(find . -name "*.go" -exec gopls check {} \;); echo $${res} && [[ -z $${res} ]]
+	@res=$$(find . -name "*.go" -not -name "*_gen.go" -not -name "*_gen_test.go" -exec gopls check {} \;); echo $${res} && [[ -z $${res} ]]
+
+generate: internal/httpclient/types_gen.go
+internal/httpclient/types_gen.go: internal/httpclient/types.go
+	go generate $<
 
 .cache/bin/golangci-lint:
 	@mkdir -p $(dir $@)

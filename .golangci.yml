@@ -53,3 +53,8 @@ linters:
       disabled-checks:
         - httpNoBody
         - whyNoLint
+
+  exclusions:
+    paths:
+      - ".*_gen.go"
+      - ".*_gen_test.go"
