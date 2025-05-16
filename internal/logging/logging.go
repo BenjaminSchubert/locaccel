@@ -1,6 +1,9 @@
 package logging
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -8,13 +11,23 @@ import (
 	"github.com/rs/zerolog/pkgerrors"
 )
 
-func CreateLogger(level zerolog.Level) zerolog.Logger {
+var ErrInvalidLogFormat = errors.New("invalid log format requested")
+
+func CreateLogger(level zerolog.Level, format string) (zerolog.Logger, error) {
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 
-	// FIXME: disable console write in production
-	return zerolog.New(
-		zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
+	var w io.Writer
+	switch format {
+	case "console":
+		w = zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
 			w.Out = os.Stderr
 			w.TimeFormat = time.RFC3339
-		})).Level(level).With().Timestamp().Caller().Logger()
+		})
+	case "json":
+		w = os.Stderr
+	default:
+		return zerolog.Logger{}, fmt.Errorf("%w: %s", ErrInvalidLogFormat, format)
+	}
+
+	return zerolog.New(w).Level(level).With().Timestamp().Caller().Logger(), nil
 }

@@ -14,7 +14,10 @@ import (
 )
 
 func main() {
-	logger := logging.CreateLogger(zerolog.WarnLevel)
+	panicLogger, err := logging.CreateLogger(zerolog.WarnLevel, "json")
+	if err != nil {
+		panic("BUG: invalid default logger")
+	}
 
 	configPath, configPathSet := os.LookupEnv("LOCACCEL_CONFIG_PATH")
 	if !configPathSet {
@@ -24,16 +27,19 @@ func main() {
 	conf, err := config.Parse(configPath)
 	if err != nil {
 		if configPathSet {
-			logger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
+			panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
 		}
 		conf = config.Default()
 	}
 
-	logLevel, err := zerolog.ParseLevel(conf.LogLevel)
+	logLevel, err := zerolog.ParseLevel(conf.Log.Level)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
+		panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
 	}
-	logger = logging.CreateLogger(logLevel)
+	logger, err := logging.CreateLogger(logLevel, conf.Log.Format)
+	if err != nil {
+		panicLogger.Fatal().Err(err).Msg("Unable to initialize logger")
+	}
 
 	if !configPathSet {
 		logger.Info().

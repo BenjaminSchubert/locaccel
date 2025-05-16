@@ -5,7 +5,6 @@ import (
 	"path"
 	"testing"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
@@ -25,7 +24,9 @@ host: 0.0.0.0
 cache: ./cache
 admin_interface: localhost:8192
 profiling: true
-log_level: error
+log:
+  level: error
+  format: console
 oci_registries:
   - upstream: https://registry-1.docker.io
     port: 1234
@@ -46,7 +47,7 @@ pypi_registries:
 			CachePath:       "./cache",
 			AdminInterface:  "localhost:8192",
 			EnableProfiling: true,
-			LogLevel:        zerolog.LevelErrorValue,
+			Log:             config.Log{"error", "console"},
 			OciRegistries: []config.OciRegistry{
 				{Upstream: "https://registry-1.docker.io", Port: 1234},
 			},

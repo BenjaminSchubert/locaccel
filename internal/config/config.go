@@ -23,12 +23,17 @@ type Proxy struct {
 	Port             uint16
 }
 
+type Log struct {
+	Level  string
+	Format string
+}
+
 type Config struct {
 	Host            string
-	CachePath       string         `yaml:"cache"`
-	AdminInterface  string         `yaml:"admin_interface"`
-	EnableProfiling bool           `yaml:"profiling"`
-	LogLevel        string         `yaml:"log_level"`
+	CachePath       string `yaml:"cache"`
+	AdminInterface  string `yaml:"admin_interface"`
+	EnableProfiling bool   `yaml:"profiling"`
+	Log             Log
 	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
 	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
 	Proxies         []Proxy
@@ -39,7 +44,7 @@ func getBaseConfig() *Config {
 		Host:           "localhost",
 		CachePath:      "_cache/",
 		AdminInterface: "localhost:3130",
-		LogLevel:       zerolog.LevelInfoValue,
+		Log:            Log{zerolog.LevelInfoValue, "json"},
 	}
 }
 
@@ -55,6 +60,7 @@ func Parse(configPath string) (*Config, error) {
 	decoder.KnownFields(true)
 	err = decoder.Decode(&c)
 
+	applyOverrides(c)
 	return c, err
 }
 
@@ -78,9 +84,20 @@ func Default() *Config {
 		3142,
 	}}
 
+	applyOverrides(conf)
+	return conf
+}
+
+func applyOverrides(conf *Config) {
 	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
 		conf.EnableProfiling = true
 	}
 
-	return conf
+	if val, ok := os.LookupEnv("LOCACCEL_LOG_LEVEL"); ok {
+		conf.Log.Level = val
+	}
+
+	if val, ok := os.LookupEnv("LOCACCEL_LOG_FORMAT"); ok {
+		conf.Log.Format = val
+	}
 }
