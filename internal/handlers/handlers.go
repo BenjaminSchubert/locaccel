@@ -16,8 +16,13 @@ func NotImplemented(w http.ResponseWriter, r *http.Request) {
 
 func RegisterProfilingHandlers(handler *http.ServeMux, prefix string) {
 	handler.HandleFunc(prefix+"", pprof.Index)
+	handler.Handle(prefix+"allocs", pprof.Handler("allocs"))
+	handler.Handle(prefix+"block", pprof.Handler("block"))
 	handler.HandleFunc(prefix+"cmdline", pprof.Cmdline)
+	handler.Handle(prefix+"goroutine", pprof.Handler("goroutine"))
+	handler.Handle(prefix+"heap", pprof.Handler("heap"))
 	handler.HandleFunc(prefix+"profile", pprof.Profile)
 	handler.HandleFunc(prefix+"symbol", pprof.Symbol)
+	handler.Handle(prefix+"threadcreate", pprof.Handler("threadcreate"))
 	handler.HandleFunc(prefix+"trace", pprof.Trace)
 }
