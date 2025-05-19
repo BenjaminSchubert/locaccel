@@ -65,3 +65,57 @@ func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 	err = db.Save("key", entry)
 	require.ErrorIs(t, err, database.ErrConflict)
 }
+
+func TestCanRetrieveStatistics(t *testing.T) {
+	t.Parallel()
+
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	for _, value := range []string{"one", "two", "three", "four", "five"} {
+		err = db.New(value, dbtestutils.TestObj{Value: value})
+		require.NoError(t, err)
+	}
+
+	count, totalSize, err := db.GetStatistics()
+	assert.Equal(t, int64(5), count)
+	assert.Equal(t, int64(78), totalSize)
+	require.NoError(t, err)
+}
+
+func TestCanIterateOverEntries(t *testing.T) {
+	t.Parallel()
+
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	for _, value := range []string{"one", "two", "three", "four", "five"} {
+		err = db.New(value, dbtestutils.TestObj{Value: value})
+		require.NoError(t, err)
+	}
+
+	collectedKeys := []string{}
+	collectedValues := []dbtestutils.TestObj{}
+
+	err = db.Iterate(t.Context(), func(key string, value dbtestutils.TestObj) error {
+		collectedKeys = append(collectedKeys, key)
+		collectedValues = append(collectedValues, value)
+		return nil
+	}, "test")
+
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"one", "two", "three", "four", "five"}, collectedKeys)
+	assert.ElementsMatch(
+		t,
+		[]dbtestutils.TestObj{
+			{Value: "one"},
+			{Value: "two"},
+			{Value: "three"},
+			{Value: "four"},
+			{Value: "five"},
+		},
+		collectedValues,
+	)
+}

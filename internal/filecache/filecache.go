@@ -126,3 +126,45 @@ func (f *FileCache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, er
 	}
 	return fp, nil
 }
+
+func (f *FileCache) GetSize(hash string, logger *zerolog.Logger) (int64, error) {
+	fp, err := os.Stat(path.Join(f.root, hash[:2], hash[2:]))
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", ErrCannotOpen, err)
+	}
+	return fp.Size(), nil
+}
+
+func (f *FileCache) GetStatistics() (count, totalSize int64, err error) {
+	dirs, err := os.ReadDir(f.root)
+	if err != nil {
+		return
+	}
+
+	var files []os.DirEntry
+	var fileInfo os.FileInfo
+
+	for _, dir := range dirs {
+		if dir.Name() == "_tmp" {
+			continue
+		}
+
+		files, err = os.ReadDir(path.Join(f.root, dir.Name()))
+		if err != nil {
+			return
+		}
+
+		count += int64(len(files))
+
+		for _, fp := range files {
+			fileInfo, err = fp.Info()
+			if err != nil {
+				return
+			}
+
+			totalSize += fileInfo.Size()
+		}
+	}
+
+	return
+}

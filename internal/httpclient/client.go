@@ -2,10 +2,8 @@ package httpclient
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -26,31 +24,8 @@ type Client struct {
 	cache  *filecache.FileCache
 }
 
-func New(client *http.Client, cachePath string, logger *zerolog.Logger) (*Client, error) {
-	cache, err := filecache.NewFileCache(path.Join(cachePath, "cache"))
-	if err != nil {
-		return nil, fmt.Errorf("unable to initialize file cache: %w", err)
-	}
-
-	// Ensure the db logger is not too chatty
-	dbLogger := logger.With().Str("component", "database").Logger()
-	if dbLogger.GetLevel() < zerolog.InfoLevel {
-		dbLogger = dbLogger.Level(zerolog.InfoLevel)
-	}
-
-	db, err := database.NewDatabase[CachedResponses](
-		path.Join(cachePath, "db"),
-		&dbLogger,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to initialize database: %w", err)
-	}
-
-	return &Client{client, db, cache}, nil
-}
-
-func (c *Client) Close() error {
-	return c.db.Close()
+func New(client *http.Client, cache *Cache, logger *zerolog.Logger) *Client {
+	return &Client{client, cache.db, cache.cache}
 }
 
 func buildKey(req *http.Request) string {

@@ -1,0 +1,14 @@
+tmp_dir = ".cache/tmp"
+
+[build]
+  args_bin = []
+  bin = "./build/locaccel"
+  cmd = "go build -o ./build/locaccel cmd/locaccel/locaccel.go"
+  exclude_dir = [".cache/", "build/"]
+  exclude_regex = ["_test.go"]
+  include_ext = ["go", "html", "css", "tmpl"]
+
+[proxy]
+  app_port = 3130
+  enabled = true
+  proxy_port = 4000

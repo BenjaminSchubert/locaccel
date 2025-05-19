@@ -1,10 +1,13 @@
 GOLANGCI_LINT_VERSION = 2.1.6
 AIR_VERSION = 1.61.7
 
+LOCACCEL_LOG_FORMAT ?= console
+LOCACCEL_LOG_LEVEL ?= debug
+
 .PHONY: all build lint fix test gopls-check start generate
 
 start: .cache/bin/air
-	air --tmp_dir .cache/tmp --build.cmd "go build -o ./build/locaccel cmd/locaccel/locaccel.go" --build.bin "./build/locaccel"
+	LOCACCEL_CACHE_PATH=.cache/locaccel LOCACCEL_LOG_FORMAT=$(LOCACCEL_LOG_FORMAT) LOCACCEL_LOG_LEVEL=$(LOCACCEL_LOG_LEVEL) $<
 
 all: build lint gopls-check test
 

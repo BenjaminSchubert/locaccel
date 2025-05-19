@@ -1,11 +1,13 @@
 package database
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/ristretto/v2/z"
 	"github.com/rs/zerolog"
 	"github.com/tinylib/msgp/msgp"
 
@@ -77,18 +79,9 @@ func (d *Database[T, TPtr]) Get(key string) (*Entry[T], error) {
 		}
 
 		err = item.Value(func(val []byte) error {
-			var value TPtr = new(T)
-			if _, err := value.UnmarshalMsg(val); err != nil {
-				return fmt.Errorf(
-					"entry in the database is not of the correct format, this should not happen: %w",
-					err,
-				)
-			}
-
-			entry.Value = *value
 			entry.version = item.Version()
-
-			return nil
+			entry.Value, err = d.unmarshal(val)
+			return err
 		})
 		if err != nil {
 			return fmt.Errorf("unexpected error extracting value: %w", err)
@@ -135,4 +128,63 @@ func (d *Database[T, TPtr]) Save(key string, entry *Entry[T]) error {
 
 func (d *Database[T, TPtr]) New(key string, value T) error {
 	return d.Save(key, &Entry[T]{Value: value})
+}
+
+func (d *Database[T, TPtr]) GetStatistics() (count, totalSize int64, err error) {
+	err = d.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			count++
+			totalSize += it.Item().EstimatedSize()
+		}
+		return nil
+	})
+
+	return count, totalSize, err
+}
+
+func (d *Database[T, TPtr]) Iterate(
+	ctx context.Context,
+	apply func(key string, value T) error,
+	logId string,
+) error {
+	stream := d.db.NewStream()
+	stream.LogPrefix = logId
+
+	stream.Send = func(buf *z.Buffer) error {
+		list, err := badger.BufferToKVList(buf)
+		if err != nil {
+			return err
+		}
+
+		for _, kv := range list.Kv {
+			val, err := d.unmarshal(kv.Value)
+			if err != nil {
+				return err
+			}
+			err = apply(string(kv.Key), val)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	return stream.Orchestrate(ctx)
+}
+
+func (d *Database[T, TPtr]) unmarshal(val []byte) (T, error) {
+	var value TPtr = new(T)
+	if _, err := value.UnmarshalMsg(val); err != nil {
+		return *value, fmt.Errorf(
+			"entry in the database is not of the correct format, this should not happen: %w",
+			err,
+		)
+	}
+
+	return *value, nil
 }

@@ -100,4 +100,8 @@ func applyOverrides(conf *Config) {
 	if val, ok := os.LookupEnv("LOCACCEL_LOG_FORMAT"); ok {
 		conf.Log.Format = val
 	}
+
+	if val, ok := os.LookupEnv("LOCACCEL_CACHE_PATH"); ok {
+		conf.CachePath = val
+	}
 }

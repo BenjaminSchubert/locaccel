@@ -1,0 +1,12 @@
+table {
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: .2em;
+}
+
+#statistics td:nth-child(2), #breakdown td:nth-child(2) {
+    text-align: right;
+}

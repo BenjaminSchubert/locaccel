@@ -14,6 +14,7 @@ import (
 
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
+	"github.com/benjaminschubert/locaccel/internal/handlers/admin"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
 	"github.com/benjaminschubert/locaccel/internal/handlers/proxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/pypi"
@@ -31,7 +32,12 @@ type Server struct {
 	logger  *zerolog.Logger
 }
 
-func New(conf *config.Config, client *httpclient.Client, logger *zerolog.Logger) *Server {
+func New(
+	conf *config.Config,
+	client *httpclient.Client,
+	cache *httpclient.Cache,
+	logger *zerolog.Logger,
+) *Server {
 	srv := Server{logger: logger}
 
 	for _, registry := range conf.OciRegistries {
@@ -47,7 +53,7 @@ func New(conf *config.Config, client *httpclient.Client, logger *zerolog.Logger)
 	}
 
 	if conf.AdminInterface != "" {
-		srv.servers = append(srv.servers, setupAdminInterface(conf, logger))
+		srv.servers = append(srv.servers, setupAdminInterface(conf, cache, logger))
 	} else if conf.EnableProfiling {
 		logger.Warn().Msg("Profiling requested, but the admin interface is disabled. Ignoring.")
 	}
@@ -148,7 +154,11 @@ func setupProxy(
 	return createServer(fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port), handler, &log)
 }
 
-func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo {
+func setupAdminInterface(
+	conf *config.Config,
+	cache *httpclient.Cache,
+	logger *zerolog.Logger,
+) serverInfo {
 	log := logger.With().Str("service", "admin").Logger()
 
 	handler := http.NewServeMux()
@@ -159,6 +169,8 @@ func setupAdminInterface(conf *config.Config, logger *zerolog.Logger) serverInfo
 			Msg("Enabling profiling")
 		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
 	}
+
+	admin.RegisterHandler(handler, cache)
 
 	return createServer(conf.AdminInterface, handler, &log)
 }

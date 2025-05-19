@@ -123,3 +123,49 @@ func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	require.Nil(t, fp)
 }
+
+func TestCanGetSizeOfFile(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir())
+	require.NoError(t, err)
+
+	var hash string
+
+	buf := bytes.NewBufferString("hello world!")
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(h string) { hash = h }, logger)
+	output, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+
+	size, err := cache.GetSize(hash, logger)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(output)), size)
+}
+
+func TestCanGetStatistics(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir())
+	require.NoError(t, err)
+
+	count, totalSize, err := cache.GetStatistics()
+	assert.Equal(t, int64(0), count)
+	assert.Equal(t, int64(0), totalSize)
+	require.NoError(t, err)
+
+	for _, content := range []string{"one", "two", "three", "four", "five"} {
+		buf := bytes.NewBufferString(content)
+		reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+		_, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+	}
+
+	count, totalSize, err = cache.GetStatistics()
+	assert.Equal(t, int64(5), count)
+	assert.Equal(t, int64(19), totalSize)
+	require.NoError(t, err)
+}

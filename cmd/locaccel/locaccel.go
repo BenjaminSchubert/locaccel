@@ -58,18 +58,21 @@ func main() {
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
-	cachingClient, err := httpclient.New(client, conf.CachePath, &logger)
+
+	cache, err := httpclient.NewCache(conf.CachePath, &logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("unable to start server: can't setup cache")
 	}
 	defer func() {
 		logger.Info().Msg("Closing up the cache")
-		if err := cachingClient.Close(); err != nil {
+		if err := cache.Close(); err != nil {
 			logger.Error().Err(err).Msg("Couldn't close the cache properly")
 		}
 	}()
 
-	srv := server.New(conf, cachingClient, &logger)
+	cachingClient := httpclient.New(client, cache, &logger)
+
+	srv := server.New(conf, cachingClient, cache, &logger)
 	if err := srv.ListenAndServe(); err != nil {
 		logger.Panic().Err(err).Msg("An error occurred while shutting down the server")
 	}

@@ -31,12 +31,12 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 			ExpectContinueTimeout: 1 * time.Second,
 		},
 	}
-	cachingClient, err := httpclient.New(client, path.Join(t.TempDir(), "cache"), logger)
-	require.NoError(t, err)
 
+	cache, err := httpclient.NewCache(path.Join(t.TempDir(), "cache"), logger)
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		assert.NoError(t, cachingClient.Close())
+		assert.NoError(t, cache.Close())
 	})
 
-	return cachingClient
+	return httpclient.New(client, cache, logger)
 }
