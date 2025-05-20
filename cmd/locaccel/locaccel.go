@@ -59,12 +59,16 @@ func main() {
 		},
 	}
 
-	cache, err := httpclient.NewCache(
-		conf.Cache.Path,
-		conf.Cache.QuotaLow,
-		conf.Cache.QuotaHigh,
-		&logger,
-	)
+	quotaLow, err := conf.Cache.GetQuotaLow()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Unable to get low quota for the cache.")
+	}
+	quotaHigh, err := conf.Cache.GetQuotaHigh()
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Unable to get low quota for the cache.")
+	}
+
+	cache, err := httpclient.NewCache(conf.Cache.Path, quotaLow, quotaHigh, &logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("unable to start server: can't setup cache")
 	}

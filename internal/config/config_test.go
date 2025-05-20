@@ -47,8 +47,12 @@ pypi_registries:
 	require.Equal(
 		t,
 		&config.Config{
-			Host:            "0.0.0.0",
-			Cache:           config.Cache{"./cache", units.Bytes{Bytes: 1}, units.Bytes{Bytes: 10}},
+			Host: "0.0.0.0",
+			Cache: config.Cache{
+				"./cache",
+				units.NewDiskQuotaInBytes(units.Bytes{Bytes: 1}),
+				units.NewDiskQuotaInBytes(units.Bytes{Bytes: 10}),
+			},
 			AdminInterface:  "localhost:8192",
 			EnableProfiling: true,
 			Log:             config.Log{"error", "console"},

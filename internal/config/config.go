@@ -32,8 +32,16 @@ type Log struct {
 
 type Cache struct {
 	Path      string
-	QuotaLow  units.Bytes `yaml:"quota_low"`
-	QuotaHigh units.Bytes `yaml:"quota_high"`
+	QuotaLow  units.DiskQuota `yaml:"quota_low"`
+	QuotaHigh units.DiskQuota `yaml:"quota_high"`
+}
+
+func (c Cache) GetQuotaLow() (units.Bytes, error) {
+	return c.QuotaLow.Bytes(c.Path)
+}
+
+func (c Cache) GetQuotaHigh() (units.Bytes, error) {
+	return c.QuotaHigh.Bytes(c.Path)
 }
 
 type Config struct {
@@ -52,8 +60,8 @@ func getBaseConfig() *Config {
 		Host: "localhost",
 		Cache: Cache{
 			"_cache/",
-			units.Bytes{Bytes: 10 * 1024 * 1024 * 1024},
-			units.Bytes{Bytes: 20 * 1024 * 1024 * 1024},
+			units.NewDiskQuotaInPercent(10),
+			units.NewDiskQuotaInPercent(20),
 		},
 		AdminInterface: "localhost:3130",
 		Log:            Log{zerolog.LevelInfoValue, "json"},
