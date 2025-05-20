@@ -16,6 +16,7 @@ import (
 
 var (
 	ErrKeyNotFound = badger.ErrKeyNotFound
+	ErrNoRewrite   = badger.ErrNoRewrite
 	ErrInvalidKey  = errors.New("invalid entry key")
 	ErrConflict    = errors.New("trying to update an entry that got updated already")
 )
@@ -40,7 +41,6 @@ type Entry[T any] struct {
 	version uint64
 }
 
-// TODO: ensure we garbage collect: https://dgraph.io/docs/badger/get-started/#garbage-collection
 type Database[T encodable, TPtr Ptr[T]] struct {
 	db *badger.DB
 }
@@ -130,6 +130,28 @@ func (d *Database[T, TPtr]) New(key string, value T) error {
 	return d.Save(key, &Entry[T]{Value: value})
 }
 
+func (d *Database[T, TPtr]) Delete(key string, entry *Entry[T]) error {
+	err := d.db.Update(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte(key))
+		if err != nil {
+			if errors.Is(err, badger.ErrKeyNotFound) {
+				return nil // all good, nothing to remove
+			}
+			return err
+		}
+
+		if item.Version() != entry.version {
+			return ErrConflict
+		}
+
+		return txn.Delete([]byte(key))
+	})
+	if err != nil {
+		return fmt.Errorf("unable to delete entry from database: %w", err)
+	}
+	return nil
+}
+
 func (d *Database[T, TPtr]) GetStatistics() (count, totalSize int64, err error) {
 	err = d.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
@@ -149,7 +171,7 @@ func (d *Database[T, TPtr]) GetStatistics() (count, totalSize int64, err error) 
 
 func (d *Database[T, TPtr]) Iterate(
 	ctx context.Context,
-	apply func(key string, value T) error,
+	apply func(key string, value *Entry[T]) error,
 	logId string,
 ) error {
 	stream := d.db.NewStream()
@@ -166,7 +188,7 @@ func (d *Database[T, TPtr]) Iterate(
 			if err != nil {
 				return err
 			}
-			err = apply(string(kv.Key), val)
+			err = apply(string(kv.Key), &Entry[T]{val, kv.Version})
 			if err != nil {
 				return err
 			}
@@ -187,4 +209,8 @@ func (d *Database[T, TPtr]) unmarshal(val []byte) (T, error) {
 	}
 
 	return *value, nil
+}
+
+func (d *Database[T, TPtr]) RunGarbageCollector() error {
+	return d.db.RunValueLogGC(0.8)
 }

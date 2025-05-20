@@ -59,7 +59,12 @@ func main() {
 		},
 	}
 
-	cache, err := httpclient.NewCache(conf.CachePath, &logger)
+	cache, err := httpclient.NewCache(
+		conf.Cache.Path,
+		conf.Cache.QuotaLow,
+		conf.Cache.QuotaHigh,
+		&logger,
+	)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("unable to start server: can't setup cache")
 	}

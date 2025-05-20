@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -16,16 +17,24 @@ import (
 )
 
 var (
-	ErrInitialize = errors.New("unable to initialize cache")
-	ErrCannotOpen = errors.New("unable to open cached file")
+	ErrInitialize          = errors.New("unable to initialize cache")
+	ErrCannotOpen          = errors.New("unable to open cached file")
+	ErrGCleanupNotRequired = errors.New("no need to remove old entries")
 )
 
 type FileCache struct {
-	root   string
-	tmpdir string
+	root      string
+	tmpdir    string
+	quotaLow  int64
+	quotaHigh int64
+	logger    *zerolog.Logger
 }
 
-func NewFileCache(root string) (*FileCache, error) {
+func NewFileCache(
+	root string,
+	quotaLow, quotaHigh int64,
+	logger *zerolog.Logger,
+) (*FileCache, error) {
 	tmpdir := path.Join(root, "_tmp")
 
 	// Ensure the tempdir exists
@@ -52,9 +61,10 @@ func NewFileCache(root string) (*FileCache, error) {
 		}
 	}
 
-	return &FileCache{root, tmpdir}, nil
+	return &FileCache{root, tmpdir, quotaLow, quotaHigh, logger}, nil
 }
 
+// FIXME: prevent ingestion of file that is bigger than max size
 func (f *FileCache) SetupIngestion(
 	src io.ReadCloser,
 	onIngest func(hash string),
@@ -127,12 +137,8 @@ func (f *FileCache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, er
 	return fp, nil
 }
 
-func (f *FileCache) GetSize(hash string, logger *zerolog.Logger) (int64, error) {
-	fp, err := os.Stat(path.Join(f.root, hash[:2], hash[2:]))
-	if err != nil {
-		return 0, fmt.Errorf("%w: %w", ErrCannotOpen, err)
-	}
-	return fp.Size(), nil
+func (f *FileCache) Stat(hash string) (os.FileInfo, error) {
+	return os.Stat(path.Join(f.root, hash[:2], hash[2:]))
 }
 
 func (f *FileCache) GetStatistics() (count, totalSize int64, err error) {
@@ -167,4 +173,135 @@ func (f *FileCache) GetStatistics() (count, totalSize int64, err error) {
 	}
 
 	return
+}
+
+func (f *FileCache) Prune(logger *zerolog.Logger) (int64, error) {
+	logger.Info().Msg("Pruning cache")
+
+	totalSize, files, err := f.getFilesAndTimestamps()
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%s: %w",
+			"unable to determine whether garbage collection needs to happen",
+			err,
+		)
+	}
+
+	if totalSize < f.quotaHigh {
+		logger.Info().
+			Int64("diskUsage", totalSize).
+			Int64("maxQuota", f.quotaHigh).
+			Msg("No need to evict files, under threshold")
+		return 0, ErrGCleanupNotRequired
+	}
+
+	logger.Info().
+		Int64("diskUsage", totalSize).
+		Int64("maxQuota", f.quotaHigh).
+		Msg("Disk usage above the required quota. Cleaning up")
+
+	timestamps := make([]int64, 0, len(files))
+	for t := range files {
+		timestamps = append(timestamps, t)
+	}
+	slices.Sort(timestamps)
+
+	removed := int64(0)
+
+outer:
+	for _, timestamp := range timestamps {
+		for _, filename := range files[timestamp] {
+			if totalSize <= f.quotaLow {
+				break outer
+			}
+
+			fileInfo, err := os.Stat(filename)
+			if err != nil {
+				logger.Error().Err(err).Msg("An unexpected error happened trying to remove file")
+			}
+			if fileInfo.ModTime().Unix() != timestamp {
+				logger.Debug().Str("filename", filename).Msg("file got it's timestamp updated since the check started, skipping")
+				continue
+			}
+
+			size := fileInfo.Size()
+			if err := os.Remove(filename); err != nil {
+				logger.Error().Err(err).Msg("An unexpected error happened trying to remove file, skipping")
+			} else {
+				logger.Debug().Str("filename", filename).Int64("size", size).Msg("Removed file from cache")
+				totalSize -= size
+				removed += 1
+			}
+		}
+	}
+
+	logger.Info().Int64("files", removed).Int64("diskUsage", totalSize).Msg("Removed files")
+	return removed, nil
+}
+
+func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles map[int64][]string, err error) {
+	dirs, err := os.ReadDir(f.root)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	timestampToFiles = make(map[int64][]string, 0)
+	var fileInfo os.FileInfo
+
+	for _, dir := range dirs {
+		dirName := dir.Name()
+		if dirName == "_tmp" {
+			continue
+		}
+
+		fullPath := path.Join(f.root, dirName)
+
+		files, err := os.ReadDir(fullPath)
+		if err != nil {
+			return 0, nil, err
+		}
+
+		for _, fp := range files {
+			fileInfo, err = fp.Info()
+			if err != nil {
+				return 0, nil, err
+			}
+
+			timestamp := fileInfo.ModTime().UTC().Unix()
+
+			timestampToFiles[timestamp] = append(
+				timestampToFiles[timestamp],
+				path.Join(fullPath, fp.Name()),
+			)
+			totalSize += fileInfo.Size()
+		}
+	}
+
+	return totalSize, timestampToFiles, nil
+}
+
+func (f *FileCache) GetAllHashes() ([]string, error) {
+	dirs, err := os.ReadDir(f.root)
+	if err != nil {
+		return nil, err
+	}
+
+	hashes := make([]string, 0, 1000)
+
+	for _, dir := range dirs {
+		if dir.Name() == "_tmp" {
+			continue
+		}
+
+		files, err := os.ReadDir(path.Join(f.root, dir.Name()))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, fp := range files {
+			hashes = append(hashes, dir.Name()+fp.Name())
+		}
+	}
+
+	return hashes, nil
 }

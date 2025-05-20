@@ -28,9 +28,15 @@ type Log struct {
 	Format string
 }
 
+type Cache struct {
+	Path      string
+	QuotaLow  int64 `yaml:"quota_low"`
+	QuotaHigh int64 `yaml:"quota_high"`
+}
+
 type Config struct {
 	Host            string
-	CachePath       string `yaml:"cache"`
+	Cache           Cache
 	AdminInterface  string `yaml:"admin_interface"`
 	EnableProfiling bool   `yaml:"profiling"`
 	Log             Log
@@ -42,7 +48,7 @@ type Config struct {
 func getBaseConfig() *Config {
 	return &Config{
 		Host:           "localhost",
-		CachePath:      "_cache/",
+		Cache:          Cache{"_cache/", 10 * 1024 * 1024 * 1024, 20 * 1024 * 1024 * 1024},
 		AdminInterface: "localhost:3130",
 		Log:            Log{zerolog.LevelInfoValue, "json"},
 	}
@@ -102,6 +108,6 @@ func applyOverrides(conf *Config) {
 	}
 
 	if val, ok := os.LookupEnv("LOCACCEL_CACHE_PATH"); ok {
-		conf.CachePath = val
+		conf.Cache.Path = val
 	}
 }

@@ -23,7 +23,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 
 	handler := &http.ServeMux{}
 
-	cache, err := httpclient.NewCache(path.Join(t.TempDir(), "cache"), logger)
+	cache, err := httpclient.NewCache(path.Join(t.TempDir(), "cache"), 100, 1000, logger)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, cache.Close())

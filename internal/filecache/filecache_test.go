@@ -8,6 +8,7 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,11 +20,21 @@ var errTest = errors.New("testerror")
 
 const testData = "1234567890"
 
+func ingest(t *testing.T, cache *filecache.FileCache, content string, logger *zerolog.Logger) {
+	t.Helper()
+
+	buf := bytes.NewBufferString(content)
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	_, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+}
+
 func TestCanIngestAndRecover(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.TestLogger(t)
-	cache, err := filecache.NewFileCache(t.TempDir())
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
 	computedHash := ""
@@ -59,7 +70,7 @@ func TestHandlesConcurrentWrites(t *testing.T) {
 	t.Parallel()
 	logger := testutils.TestLogger(t)
 
-	cache, err := filecache.NewFileCache(t.TempDir())
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
 	hash1 := ""
@@ -96,7 +107,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	cacheDir := t.TempDir()
 	logger := testutils.TestLogger(t)
 
-	cache, err := filecache.NewFileCache(cacheDir)
+	cache, err := filecache.NewFileCache(cacheDir, 100, 1000, logger)
 	require.NoError(t, err)
 
 	reader := cache.SetupIngestion(
@@ -115,7 +126,7 @@ func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.TestLogger(t)
-	cache, err := filecache.NewFileCache(t.TempDir())
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
 	fp, err := cache.Open("nonexistent", logger)
@@ -124,11 +135,11 @@ func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	require.Nil(t, fp)
 }
 
-func TestCanGetSizeOfFile(t *testing.T) {
+func TestCanStatFile(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.TestLogger(t)
-	cache, err := filecache.NewFileCache(t.TempDir())
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
 	var hash string
@@ -139,16 +150,16 @@ func TestCanGetSizeOfFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 
-	size, err := cache.GetSize(hash, logger)
+	stat, err := cache.Stat(hash)
 	require.NoError(t, err)
-	require.Equal(t, int64(len(output)), size)
+	require.Equal(t, int64(len(output)), stat.Size())
 }
 
 func TestCanGetStatistics(t *testing.T) {
 	t.Parallel()
 
 	logger := testutils.TestLogger(t)
-	cache, err := filecache.NewFileCache(t.TempDir())
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
 	count, totalSize, err := cache.GetStatistics()
@@ -157,15 +168,77 @@ func TestCanGetStatistics(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, content := range []string{"one", "two", "three", "four", "five"} {
-		buf := bytes.NewBufferString(content)
-		reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
-		_, err := io.ReadAll(reader)
-		require.NoError(t, err)
-		require.NoError(t, reader.Close())
+		ingest(t, cache, content, logger)
 	}
+
+	// tmp should be ignored
+	buf := bytes.NewBufferString("six")
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	_, err = io.ReadAll(reader)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reader.Close()) })
 
 	count, totalSize, err = cache.GetStatistics()
 	assert.Equal(t, int64(5), count)
 	assert.Equal(t, int64(19), totalSize)
 	require.NoError(t, err)
+}
+
+func TestCanRemoveOldFiles(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir(), 10, 20, logger)
+	require.NoError(t, err)
+
+	// Under the limit
+	for _, content := range []string{"first", "second", "third"} {
+		ingest(t, cache, content, logger)
+	}
+
+	count, err := cache.Prune(logger)
+	require.ErrorIs(t, err, filecache.ErrGCleanupNotRequired)
+	require.Equal(t, int64(0), count)
+
+	// Now we need cleaning
+	ingest(t, cache, "fourth", logger)
+
+	count, err = cache.Prune(logger)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), count)
+}
+
+func TestCanGetAllHashes(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
+	require.NoError(t, err)
+
+	count, totalSize, err := cache.GetStatistics()
+	assert.Equal(t, int64(0), count)
+	assert.Equal(t, int64(0), totalSize)
+	require.NoError(t, err)
+
+	for _, content := range []string{"one", "two"} {
+		ingest(t, cache, content, logger)
+	}
+
+	// tmp should be ignored
+	buf := bytes.NewBufferString("three")
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	_, err = io.ReadAll(reader)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reader.Close()) })
+
+	hashes, err := cache.GetAllHashes()
+	require.NoError(t, err)
+	assert.ElementsMatch(
+		t,
+		[]string{
+			"d33fb48ab5adff269ae172b29a6913ff04f6f266207a7a8e976f2ecd571d4492",
+			"dc770fff53f50835f8cc957e01c0d5731d3c2ed544c375493a28c09be5e09763",
+		},
+		hashes,
+	)
 }

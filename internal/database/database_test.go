@@ -99,11 +99,15 @@ func TestCanIterateOverEntries(t *testing.T) {
 	collectedKeys := []string{}
 	collectedValues := []dbtestutils.TestObj{}
 
-	err = db.Iterate(t.Context(), func(key string, value dbtestutils.TestObj) error {
-		collectedKeys = append(collectedKeys, key)
-		collectedValues = append(collectedValues, value)
-		return nil
-	}, "test")
+	err = db.Iterate(
+		t.Context(),
+		func(key string, entry *database.Entry[dbtestutils.TestObj]) error {
+			collectedKeys = append(collectedKeys, key)
+			collectedValues = append(collectedValues, entry.Value)
+			return nil
+		},
+		"test",
+	)
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"one", "two", "three", "four", "five"}, collectedKeys)
@@ -118,4 +122,22 @@ func TestCanIterateOverEntries(t *testing.T) {
 		},
 		collectedValues,
 	)
+}
+
+func TestCanDeleteEntry(t *testing.T) {
+	t.Parallel()
+
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+
+	err = db.New("one", dbtestutils.TestObj{Value: "one"})
+	require.NoError(t, err)
+
+	val, err := db.Get("one")
+	require.NoError(t, err)
+
+	require.NoError(t, db.Delete("one", val))
+	// No error when not found
+	require.NoError(t, db.Delete("one", val))
 }

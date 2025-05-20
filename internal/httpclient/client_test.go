@@ -5,126 +5,31 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path"
-	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/dgraph-io/badger/v4"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/benjaminschubert/locaccel/internal/logging"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
-func getAllEntriesInDB(
-	t *testing.T,
-	cacheRoot string,
-	logger *zerolog.Logger,
-) map[string]CachedResponses {
-	t.Helper()
-
-	db, err := badger.Open(
-		badger.DefaultOptions(path.Join(cacheRoot, "db")).
-			WithLogger(logging.NewLoggerAdapter(logger)),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, db.Close()) })
-
-	cachedResponses := map[string]CachedResponses{}
-
-	err = db.View(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			val, err := item.ValueCopy(nil)
-			if err != nil {
-				return err
-			}
-
-			entry := CachedResponses{}
-			_, err = entry.UnmarshalMsg(val)
-			if err != nil {
-				return err
-			}
-
-			cachedResponses[string(item.Key())] = entry
-		}
-
-		return nil
-	})
-	require.NoError(t, err)
-
-	return cachedResponses
-}
-
-func getAllEntriesInFileCache(t *testing.T, cacheRoot string) []string {
-	t.Helper()
-
-	cachePath := path.Join(cacheRoot, "cache")
-	files, err := filepath.Glob(path.Join(cachePath, "*", "*"))
-	require.NoError(t, err)
-
-	filePaths := []string{}
-	for _, file := range files {
-		filePaths = append(filePaths, strings.TrimPrefix(file, cachePath+"/"))
-	}
-
-	return filePaths
-}
-
-func validateCache(
-	t *testing.T,
-	cacheRoot string,
-	logger *zerolog.Logger,
-	expected map[string]CachedResponses,
-	startTime time.Time,
-) {
-	t.Helper()
-
-	entriesInDB := getAllEntriesInDB(t, cacheRoot, logger)
-	for _, entries := range entriesInDB {
-		for i := range entries {
-			assert.Greater(t, entries[i].TimeAtRequestCreated, startTime)
-			assert.Greater(t, entries[i].TimeAtResponseReceived, entries[i].TimeAtRequestCreated)
-
-			entries[i].TimeAtRequestCreated = time.Time{}
-			entries[i].TimeAtResponseReceived = time.Time{}
-		}
-	}
-	assert.Equal(t, expected, entriesInDB)
-
-	expectedFiles := make([]string, 0, len(expected))
-	for _, responses := range expected {
-		for _, resp := range responses {
-			expectedFiles = append(expectedFiles, resp.ContentHash[:2]+"/"+resp.ContentHash[2:])
-		}
-	}
-
-	assert.Equal(t, expectedFiles, getAllEntriesInFileCache(t, cacheRoot))
-}
-
-func setup(t *testing.T) (client *Client, cache *Cache, valCache func(map[string]CachedResponses)) {
+func setup(t *testing.T) (client *Client, valCache func(map[string]CachedResponses)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
 	logger := testutils.TestLogger(t)
 
-	cache, err := NewCache(cachePath, logger)
+	cache, err := NewCache(cachePath, 100, 1000, logger)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
 
 	currentTime := time.Now()
 
-	return New(&http.Client{}, cache, logger), cache, func(expected map[string]CachedResponses) {
-		validateCache(t, cachePath, logger, expected, currentTime)
+	return New(&http.Client{}, cache, logger), func(expected map[string]CachedResponses) {
+		validateCache(t, cache, expected, currentTime)
 	}
 }
 
@@ -156,7 +61,7 @@ func makeRequest(
 func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -170,15 +75,13 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "hello!", body)
 
-	require.NoError(t, cache.Close())
-
 	validateCache(map[string]CachedResponses{})
 }
 
 func TestClientDoesNotCachedErrors(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -191,7 +94,6 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 
 	_, err = client.Do(req) //nolint:bodyclose
 	require.ErrorContains(t, err, "EOF")
-	require.NoError(t, cache.Close())
 
 	validateCache(map[string]CachedResponses{})
 }
@@ -199,7 +101,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "no-store")
@@ -212,15 +114,13 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
-	require.NoError(t, cache.Close())
-
 	validateCache(map[string]CachedResponses{})
 }
 
 func TestClientCachesCacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "public")
@@ -232,8 +132,6 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
-
-	require.NoError(t, cache.Close())
 
 	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
@@ -257,7 +155,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	client, _, _ := setup(t)
+	client, _ := setup(t)
 
 	wasCalled := false
 
@@ -308,7 +206,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	count := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -364,8 +262,6 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 
 	require.Equal(t, 2, count, "The API was hit %d times instead of 2", count)
 
-	require.NoError(t, cache.Close())
-
 	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
 			{
@@ -403,7 +299,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 func TestValidationEtag(t *testing.T) {
 	t.Parallel()
 
-	client, cache, validateCache := setup(t)
+	client, validateCache := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "public, no-cache")
@@ -457,8 +353,6 @@ func TestValidationEtag(t *testing.T) {
 		resp2.Header,
 	)
 
-	require.NoError(t, cache.Close())
-
 	validateCache(map[string]CachedResponses{
 		"GET+" + srv.URL: {
 			{
@@ -483,7 +377,7 @@ func TestValidationEtag(t *testing.T) {
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Parallel()
 
-	client, _, _ := setup(t)
+	client, _ := setup(t)
 
 	wasCalled := false
 

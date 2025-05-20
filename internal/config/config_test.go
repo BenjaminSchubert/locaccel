@@ -21,7 +21,10 @@ func TestCanParseValidConfiguration(t *testing.T) {
 			configFile,
 			[]byte(`
 host: 0.0.0.0
-cache: ./cache
+cache:
+  path: ./cache
+  quota_low: 1
+  quota_high: 10
 admin_interface: localhost:8192
 profiling: true
 log:
@@ -44,7 +47,7 @@ pypi_registries:
 		t,
 		&config.Config{
 			Host:            "0.0.0.0",
-			CachePath:       "./cache",
+			Cache:           config.Cache{"./cache", 1, 10},
 			AdminInterface:  "localhost:8192",
 			EnableProfiling: true,
 			Log:             config.Log{"error", "console"},
