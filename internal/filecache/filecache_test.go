@@ -123,6 +123,26 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	require.NoError(t, reader.Close())
 }
 
+func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	logger := testutils.TestLogger(t)
+
+	cache, err := filecache.NewFileCache(cacheDir, 5, 10, logger)
+	require.NoError(t, err)
+
+	reader := cache.SetupIngestion(
+		io.NopCloser(bytes.NewBufferString("toolong")),
+		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+		logger,
+	)
+
+	_, err = io.ReadAll(reader)
+	require.NoError(t, err)
+	require.NoError(t, reader.Close())
+}
+
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 

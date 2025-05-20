@@ -65,7 +65,6 @@ func NewFileCache(
 	return &FileCache{root, tmpdir, quotaLow, quotaHigh, logger}, nil
 }
 
-// FIXME: prevent ingestion of file that is bigger than max size
 func (f *FileCache) SetupIngestion(
 	src io.ReadCloser,
 	onIngest func(hash string),
@@ -82,7 +81,12 @@ func (f *FileCache) SetupIngestion(
 	return teereader.New(
 		src,
 		io.MultiWriter(dest, hasher),
-		func(readErr, writeErr error) error {
+		func(totalread int, readErr, writeErr error) error {
+			if totalread > (int(f.quotaHigh) / 2) {
+				logger.Warn().Int("size", totalread).Msg("File is too big for the cache. Skipping")
+				return f.cleanup(src, dest, logger)
+			}
+
 			if readErr != nil || writeErr != nil {
 				err := readErr
 				reason := "Read Error"

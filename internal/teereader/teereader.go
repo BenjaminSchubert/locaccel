@@ -5,18 +5,25 @@ import "io"
 type TeeReader struct {
 	src          io.Reader
 	dest         io.Writer
-	onClose      func(readErr, writeErr error) error
+	onClose      func(totalRead int, readErr, writeErr error) error
 	lastReadErr  error
 	lastWriteErr error
+	totalRead    int
 }
 
-func New(src io.Reader, dest io.Writer, onClose func(readErr, writeErr error) error) *TeeReader {
+func New(
+	src io.Reader,
+	dest io.Writer,
+	onClose func(totalRead int, readErr, writeErr error) error,
+) *TeeReader {
 	return &TeeReader{src: src, dest: dest, onClose: onClose}
 }
 
 func (t *TeeReader) Read(p []byte) (int, error) {
 	if t.lastWriteErr != nil || t.lastReadErr != nil {
-		return t.src.Read(p)
+		n, err := t.src.Read(p)
+		t.totalRead += n
+		return n, err
 	}
 
 	n, readErr := t.src.Read(p)
@@ -30,9 +37,10 @@ func (t *TeeReader) Read(p []byte) (int, error) {
 		}
 	}
 
+	t.totalRead += n
 	return n, readErr
 }
 
 func (t *TeeReader) Close() error {
-	return t.onClose(t.lastReadErr, t.lastWriteErr)
+	return t.onClose(t.totalRead, t.lastReadErr, t.lastWriteErr)
 }

@@ -32,7 +32,8 @@ func TestReadCopiesCorrectly(t *testing.T) {
 	src := bytes.NewBufferString(data)
 	writer := bytes.NewBufferString("")
 
-	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
+	reader := teereader.New(src, writer, func(size int, readErr, writeErr error) error {
+		assert.Equal(t, len(data), size)
 		assert.NoError(t, readErr)
 		assert.NoError(t, writeErr)
 
@@ -55,7 +56,7 @@ func TestReadReportsErrors(t *testing.T) {
 	src := iotest.ErrReader(errTest)
 	writer := bytes.NewBufferString("")
 
-	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
+	reader := teereader.New(src, writer, func(_ int, readErr, writeErr error) error {
 		require.NoError(t, writeErr)
 		assert.ErrorIs(t, errTest, readErr)
 
@@ -78,7 +79,8 @@ func TestReaderHandlesPartialReads(t *testing.T) {
 	src := iotest.HalfReader(bytes.NewBufferString(data))
 	writer := bytes.NewBufferString("")
 
-	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
+	reader := teereader.New(src, writer, func(size int, readErr, writeErr error) error {
+		assert.Equal(t, len(data), size)
 		assert.NoError(t, readErr)
 		assert.NoError(t, writeErr)
 
@@ -100,8 +102,9 @@ func TestReadsAllEvenOnWriteError(t *testing.T) {
 	src := bytes.NewBufferString(data)
 	writer := MaxSizeWriter{}
 
-	reader := teereader.New(src, writer, func(readErr, writeErr error) error {
+	reader := teereader.New(src, writer, func(size int, readErr, writeErr error) error {
 		require.NoError(t, readErr)
+		assert.Equal(t, len(data), size)
 		assert.ErrorIs(t, writeErr, errMaxSizedReached)
 
 		return nil
