@@ -53,6 +53,13 @@ func (d *DiskQuota) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+func (d DiskQuota) MarshalYAML() (any, error) {
+	if d.percent == 0.0 {
+		return d.bytes.String(), nil
+	}
+	return fmt.Sprintf("%.f%%", d.percent), nil
+}
+
 func (d DiskQuota) Bytes(path string) (Bytes, error) {
 	if d.percent != 0.0 {
 		fs := syscall.Statfs_t{}

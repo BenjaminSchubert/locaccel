@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers/admin"
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -35,7 +36,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 		assert.NoError(t, cache.Close())
 	})
 
-	admin.RegisterHandler(handler, cache)
+	require.NoError(t, admin.RegisterHandler(handler, cache, config.Default()))
 	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
 	defer server.Close()
 

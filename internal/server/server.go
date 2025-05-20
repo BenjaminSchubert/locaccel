@@ -170,7 +170,9 @@ func setupAdminInterface(
 		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
 	}
 
-	admin.RegisterHandler(handler, cache)
+	if err := admin.RegisterHandler(handler, cache, conf); err != nil {
+		logger.Panic().Err(err).Msg("unable to initialize server properly")
+	}
 
 	return createServer(conf.AdminInterface, handler, &log)
 }

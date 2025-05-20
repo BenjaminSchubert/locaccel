@@ -10,3 +10,7 @@ th, td {
 #statistics td:nth-child(2), #breakdown td:nth-child(2) {
     text-align: right;
 }
+
+#config {
+    background-color: darkgray;
+}

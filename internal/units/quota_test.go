@@ -2,6 +2,7 @@ package units_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,24 @@ func TestCanParseQuotaPercent(t *testing.T) {
 	err := decoder.Decode(&quota)
 	require.NoError(t, err)
 	require.Equal(t, units.NewDiskQuotaInPercent(10), quota)
+}
+
+func TestCanEncodeToYamlForPercentages(t *testing.T) {
+	t.Parallel()
+
+	buf := strings.Builder{}
+	encoder := yaml.NewEncoder(&buf)
+	require.NoError(t, encoder.Encode(units.NewDiskQuotaInPercent(10)))
+	require.Equal(t, "10%\n", buf.String())
+}
+
+func TestCanEncodeToYamlForBytes(t *testing.T) {
+	t.Parallel()
+
+	buf := strings.Builder{}
+	encoder := yaml.NewEncoder(&buf)
+	require.NoError(t, encoder.Encode(units.NewDiskQuotaInBytes(units.Bytes{10})))
+	require.Equal(t, "10B\n", buf.String())
 }
 
 func TestCanGetBytesFromPercent(t *testing.T) {
