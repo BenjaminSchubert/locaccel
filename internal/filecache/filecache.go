@@ -14,6 +14,7 @@ import (
 	"github.com/zeebo/blake3"
 
 	"github.com/benjaminschubert/locaccel/internal/teereader"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 var (
@@ -141,7 +142,7 @@ func (f *FileCache) Stat(hash string) (os.FileInfo, error) {
 	return os.Stat(path.Join(f.root, hash[:2], hash[2:]))
 }
 
-func (f *FileCache) GetStatistics() (count, totalSize int64, err error) {
+func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err error) {
 	dirs, err := os.ReadDir(f.root)
 	if err != nil {
 		return
@@ -168,7 +169,7 @@ func (f *FileCache) GetStatistics() (count, totalSize int64, err error) {
 				return
 			}
 
-			totalSize += fileInfo.Size()
+			totalSize.Bytes += fileInfo.Size()
 		}
 	}
 

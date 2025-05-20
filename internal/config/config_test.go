@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 func TestCanParseValidConfiguration(t *testing.T) {
@@ -47,7 +48,7 @@ pypi_registries:
 		t,
 		&config.Config{
 			Host:            "0.0.0.0",
-			Cache:           config.Cache{"./cache", 1, 10},
+			Cache:           config.Cache{"./cache", units.Bytes{Bytes: 1}, units.Bytes{Bytes: 10}},
 			AdminInterface:  "localhost:8192",
 			EnableProfiling: true,
 			Log:             config.Log{"error", "console"},

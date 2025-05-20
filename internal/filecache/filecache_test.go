@@ -14,6 +14,7 @@ import (
 
 	"github.com/benjaminschubert/locaccel/internal/filecache"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 var errTest = errors.New("testerror")
@@ -164,7 +165,7 @@ func TestCanGetStatistics(t *testing.T) {
 
 	count, totalSize, err := cache.GetStatistics()
 	assert.Equal(t, int64(0), count)
-	assert.Equal(t, int64(0), totalSize)
+	assert.Equal(t, units.Bytes{Bytes: 0}, totalSize)
 	require.NoError(t, err)
 
 	for _, content := range []string{"one", "two", "three", "four", "five"} {
@@ -180,7 +181,7 @@ func TestCanGetStatistics(t *testing.T) {
 
 	count, totalSize, err = cache.GetStatistics()
 	assert.Equal(t, int64(5), count)
-	assert.Equal(t, int64(19), totalSize)
+	assert.Equal(t, units.Bytes{Bytes: 19}, totalSize)
 	require.NoError(t, err)
 }
 
@@ -217,7 +218,7 @@ func TestCanGetAllHashes(t *testing.T) {
 
 	count, totalSize, err := cache.GetStatistics()
 	assert.Equal(t, int64(0), count)
-	assert.Equal(t, int64(0), totalSize)
+	assert.Equal(t, units.Bytes{Bytes: 0}, totalSize)
 	require.NoError(t, err)
 
 	for _, content := range []string{"one", "two"} {

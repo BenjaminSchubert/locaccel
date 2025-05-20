@@ -5,6 +5,8 @@ import (
 
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 type OciRegistry struct {
@@ -30,8 +32,8 @@ type Log struct {
 
 type Cache struct {
 	Path      string
-	QuotaLow  int64 `yaml:"quota_low"`
-	QuotaHigh int64 `yaml:"quota_high"`
+	QuotaLow  units.Bytes `yaml:"quota_low"`
+	QuotaHigh units.Bytes `yaml:"quota_high"`
 }
 
 type Config struct {
@@ -47,8 +49,12 @@ type Config struct {
 
 func getBaseConfig() *Config {
 	return &Config{
-		Host:           "localhost",
-		Cache:          Cache{"_cache/", 10 * 1024 * 1024 * 1024, 20 * 1024 * 1024 * 1024},
+		Host: "localhost",
+		Cache: Cache{
+			"_cache/",
+			units.Bytes{Bytes: 10 * 1024 * 1024 * 1024},
+			units.Bytes{Bytes: 20 * 1024 * 1024 * 1024},
+		},
 		AdminInterface: "localhost:3130",
 		Log:            Log{zerolog.LevelInfoValue, "json"},
 	}

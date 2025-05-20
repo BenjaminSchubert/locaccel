@@ -9,6 +9,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/database/internal/dbtestutils"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 func TestRetrieveNotFound(t *testing.T) {
@@ -80,7 +81,7 @@ func TestCanRetrieveStatistics(t *testing.T) {
 
 	count, totalSize, err := db.GetStatistics()
 	assert.Equal(t, int64(5), count)
-	assert.Equal(t, int64(78), totalSize)
+	assert.Equal(t, units.Bytes{Bytes: 78}, totalSize)
 	require.NoError(t, err)
 }
 

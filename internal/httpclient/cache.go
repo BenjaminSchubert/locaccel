@@ -15,14 +15,18 @@ import (
 
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/filecache"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 type CacheStatistics struct {
-	DatabaseSize     int64
+	DatabaseSize     units.Bytes
 	DatabaseEntries  int64
-	FileCacheSize    int64
+	FileCacheSize    units.Bytes
 	FileCacheEntries int64
-	UsagePerHostName map[string]struct{ Entries, Size int64 }
+	UsagePerHostName map[string]struct {
+		Entries int64
+		Size    units.Bytes
+	}
 }
 
 type Cache struct {
@@ -34,12 +38,16 @@ type Cache struct {
 	cacheLock  *sync.Mutex
 }
 
-func NewCache(cachePath string, quotaLow, quotaHigh int64, logger *zerolog.Logger) (*Cache, error) {
+func NewCache(
+	cachePath string,
+	quotaLow, quotaHigh units.Bytes,
+	logger *zerolog.Logger,
+) (*Cache, error) {
 	fileCacheLogger := logger.With().Str("component", "filecache").Logger()
 	fileCache, err := filecache.NewFileCache(
 		path.Join(cachePath, "cache"),
-		quotaLow,
-		quotaHigh,
+		quotaLow.Bytes,
+		quotaHigh.Bytes,
 		&fileCacheLogger,
 	)
 	if err != nil {
@@ -89,7 +97,10 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 		return CacheStatistics{}, err
 	}
 
-	usagePerHostname := map[string]struct{ Entries, Size int64 }{}
+	usagePerHostname := map[string]struct {
+		Entries int64
+		Size    units.Bytes
+	}{}
 
 	err = c.db.Iterate(ctx,
 		func(key string, responses *database.Entry[CachedResponses]) error {
@@ -106,7 +117,7 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 			for _, resp := range responses.Value {
 				stat, err := c.cache.Stat(resp.ContentHash)
 				if err == nil {
-					entry.Size += stat.Size()
+					entry.Size.Bytes += stat.Size()
 				} else if !errors.Is(err, fs.ErrNotExist) {
 					return err
 				}

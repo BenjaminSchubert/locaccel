@@ -8,7 +8,6 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
-	"github.com/benjaminschubert/locaccel/internal/prettify"
 )
 
 //go:embed templates
@@ -18,9 +17,7 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 func RegisterHandler(handler *http.ServeMux, cache *httpclient.Cache) {
-	templates := template.Must(template.New("index").Funcs(template.FuncMap{
-		"FormatBytes": prettify.Bytes,
-	}).ParseFS(templatesFS, "templates/*.tmpl"))
+	templates := template.Must(template.New("index").ParseFS(templatesFS, "templates/*.tmpl"))
 
 	handler.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 	handler.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {

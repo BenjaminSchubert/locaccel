@@ -12,6 +12,7 @@ import (
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	tst "github.com/benjaminschubert/locaccel/internal/testutils"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 var TestLogger = tst.TestLogger
@@ -32,7 +33,12 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 		},
 	}
 
-	cache, err := httpclient.NewCache(path.Join(t.TempDir(), "cache"), 100, 1000, logger)
+	cache, err := httpclient.NewCache(
+		path.Join(t.TempDir(), "cache"),
+		units.Bytes{Bytes: 100},
+		units.Bytes{Bytes: 1000},
+		logger,
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, cache.Close())

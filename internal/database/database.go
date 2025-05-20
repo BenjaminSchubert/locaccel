@@ -12,6 +12,7 @@ import (
 	"github.com/tinylib/msgp/msgp"
 
 	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 var (
@@ -152,7 +153,7 @@ func (d *Database[T, TPtr]) Delete(key string, entry *Entry[T]) error {
 	return nil
 }
 
-func (d *Database[T, TPtr]) GetStatistics() (count, totalSize int64, err error) {
+func (d *Database[T, TPtr]) GetStatistics() (count int64, totalSize units.Bytes, err error) {
 	err = d.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchValues = false
@@ -161,7 +162,7 @@ func (d *Database[T, TPtr]) GetStatistics() (count, totalSize int64, err error) 
 
 		for it.Rewind(); it.Valid(); it.Next() {
 			count++
-			totalSize += it.Item().EstimatedSize()
+			totalSize.Bytes += it.Item().EstimatedSize()
 		}
 		return nil
 	})

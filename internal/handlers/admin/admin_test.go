@@ -14,6 +14,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
@@ -23,7 +24,12 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 
 	handler := &http.ServeMux{}
 
-	cache, err := httpclient.NewCache(path.Join(t.TempDir(), "cache"), 100, 1000, logger)
+	cache, err := httpclient.NewCache(
+		path.Join(t.TempDir(), "cache"),
+		units.Bytes{Bytes: 100},
+		units.Bytes{Bytes: 1000},
+		logger,
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		assert.NoError(t, cache.Close())

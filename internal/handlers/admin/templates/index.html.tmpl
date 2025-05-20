@@ -21,12 +21,12 @@
                     <tr>
                         <td>Database</td>
                         <td>{{ .DatabaseEntries }}</td>
-                        <td>{{ FormatBytes .DatabaseSize }}</td>
+                        <td>{{ .DatabaseSize }}</td>
                     </tr>
                     <tr>
                         <td>File Cache</td>
                         <td>{{ .FileCacheEntries }}</td>
-                        <td>{{ FormatBytes .FileCacheSize }}</td>
+                        <td>{{ .FileCacheSize }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -45,7 +45,7 @@
                     <tr>
                         <td>{{ $key }}</td>
                         <td>{{ $info.Entries }}</td>
-                        <td>{{ FormatBytes $info.Size }}</td>
+                        <td>{{ $info.Size }}</td>
                     </tr>
                 {{ end }}
                 </tbody>

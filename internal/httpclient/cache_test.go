@@ -14,6 +14,7 @@ import (
 
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 func validateCache(
@@ -95,22 +96,32 @@ func addEntry(t *testing.T, cache *Cache, key string, data []string) {
 func TestCanGetStatisticsOnEmptyCache(t *testing.T) {
 	t.Parallel()
 
-	cache, err := NewCache(t.TempDir(), 10, 20, testutils.TestLogger(t))
+	cache, err := NewCache(
+		t.TempDir(),
+		units.Bytes{Bytes: 10},
+		units.Bytes{Bytes: 20},
+		testutils.TestLogger(t),
+	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
 	stats, err := cache.GetStatistics(t.Context(), "test")
 	require.NoError(t, err)
-	require.Equal(t, CacheStatistics{0, 0, 0, 0, map[string]struct {
+	require.Equal(t, CacheStatistics{units.Bytes{}, 0, units.Bytes{}, 0, map[string]struct {
 		Entries int64
-		Size    int64
+		Size    units.Bytes
 	}{}}, stats)
 }
 
 func TestCanGetStatistics(t *testing.T) {
 	t.Parallel()
 
-	cache, err := NewCache(t.TempDir(), 10, 20, testutils.TestLogger(t))
+	cache, err := NewCache(
+		t.TempDir(),
+		units.Bytes{Bytes: 10},
+		units.Bytes{Bytes: 20},
+		testutils.TestLogger(t),
+	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
@@ -136,10 +147,14 @@ func TestCanGetStatistics(t *testing.T) {
 
 	stats, err := cache.GetStatistics(t.Context(), "test")
 	require.NoError(t, err)
-	require.Equal(t, CacheStatistics{603, 4, 27, 5, map[string]struct {
-		Entries int64
-		Size    int64
-	}{"one.test": {1, 3}, "two.test": {2, 10}, "three.test": {2, 14}}}, stats)
+	require.Equal(
+		t,
+		CacheStatistics{units.Bytes{Bytes: 603}, 4, units.Bytes{Bytes: 27}, 5, map[string]struct {
+			Entries int64
+			Size    units.Bytes
+		}{"one.test": {1, units.Bytes{Bytes: 3}}, "two.test": {2, units.Bytes{Bytes: 10}}, "three.test": {2, units.Bytes{Bytes: 14}}}},
+		stats,
+	)
 }
 
 func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
@@ -147,7 +162,12 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 
 	startTime := time.Now()
 
-	cache, err := NewCache(t.TempDir(), 10, 20, testutils.TestLogger(t))
+	cache, err := NewCache(
+		t.TempDir(),
+		units.Bytes{Bytes: 10},
+		units.Bytes{Bytes: 20},
+		testutils.TestLogger(t),
+	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
@@ -177,7 +197,12 @@ func TestCanCleanOldEntries(t *testing.T) {
 	cachePath := t.TempDir()
 	startTime := time.Now()
 
-	cache, err := NewCache(cachePath, 10, 20, testutils.TestLogger(t))
+	cache, err := NewCache(
+		cachePath,
+		units.Bytes{Bytes: 10},
+		units.Bytes{Bytes: 20},
+		testutils.TestLogger(t),
+	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 

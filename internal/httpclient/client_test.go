@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/testutils"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 func setup(t *testing.T) (client *Client, valCache func(map[string]CachedResponses)) {
@@ -22,7 +23,7 @@ func setup(t *testing.T) (client *Client, valCache func(map[string]CachedRespons
 	cachePath := t.TempDir()
 	logger := testutils.TestLogger(t)
 
-	cache, err := NewCache(cachePath, 100, 1000, logger)
+	cache, err := NewCache(cachePath, units.Bytes{Bytes: 100}, units.Bytes{Bytes: 1000}, logger)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
 
