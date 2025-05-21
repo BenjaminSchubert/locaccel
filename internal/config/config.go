@@ -37,10 +37,18 @@ type Cache struct {
 }
 
 func (c Cache) GetQuotaLow() (units.Bytes, error) {
+	err := os.MkdirAll(c.Path, 0o750)
+	if err != nil {
+		return units.Bytes{}, err
+	}
 	return c.QuotaLow.Bytes(c.Path)
 }
 
 func (c Cache) GetQuotaHigh() (units.Bytes, error) {
+	err := os.MkdirAll(c.Path, 0o750)
+	if err != nil {
+		return units.Bytes{}, err
+	}
 	return c.QuotaHigh.Bytes(c.Path)
 }
 
@@ -88,7 +96,7 @@ func Default() *Config {
 	conf := getBaseConfig()
 	conf.OciRegistries = []OciRegistry{
 		{"https://registry-1.docker.io", 3131},
-		{"https://ghcr.io", 3132},
+		{"https://gcr.io", 3132},
 		{"https://quay.io", 3133},
 	}
 	conf.PyPIRegistries = []PyPIRegistry{
@@ -123,5 +131,9 @@ func applyOverrides(conf *Config) {
 
 	if val, ok := os.LookupEnv("LOCACCEL_CACHE_PATH"); ok {
 		conf.Cache.Path = val
+	}
+
+	if val, ok := os.LookupEnv("LOCACCEL_HOST"); ok {
+		conf.Host = val
 	}
 }

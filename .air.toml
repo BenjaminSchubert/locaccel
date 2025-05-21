@@ -2,9 +2,9 @@ tmp_dir = ".cache/tmp"
 
 [build]
   args_bin = []
-  bin = "./build/locaccel"
-  cmd = "go build -o ./build/locaccel cmd/locaccel/locaccel.go"
-  exclude_dir = [".cache/", "build/"]
+  bin = "./.cache/build/locaccel"
+  cmd = "go build -o ./.cache/build/locaccel cmd/locaccel/locaccel.go"
+  exclude_dir = [".cache/"]
   exclude_regex = ["_test.go"]
   include_ext = ["go", "html", "css", "tmpl"]
 

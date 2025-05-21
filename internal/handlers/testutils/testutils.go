@@ -35,8 +35,8 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 
 	cache, err := httpclient.NewCache(
 		path.Join(t.TempDir(), "cache"),
-		units.Bytes{Bytes: 100},
-		units.Bytes{Bytes: 1000},
+		units.Bytes{Bytes: 1024 * 1024},
+		units.Bytes{Bytes: 10 * 1024 * 1024},
 		logger,
 	)
 	require.NoError(t, err)
