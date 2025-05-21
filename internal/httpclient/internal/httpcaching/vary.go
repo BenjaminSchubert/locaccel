@@ -11,15 +11,15 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func normalizeVaryHeaders(headers http.Header) map[string]struct{} {
-	hdrs := make(map[string]struct{})
+func getVaryHeaderNames(headers http.Header) []string {
+	hdrs := make([]string, 0)
 
 	varys := headers["Vary"]
 	for _, vary := range varys {
 		for field := range strings.SplitSeq(vary, ",") {
 			field = strings.TrimSpace(field)
 			if field != "" {
-				hdrs[field] = struct{}{}
+				hdrs = append(hdrs, field)
 			}
 		}
 	}
@@ -27,26 +27,35 @@ func normalizeVaryHeaders(headers http.Header) map[string]struct{} {
 	return hdrs
 }
 
+func normalizeVaryHeaders(headerVal []string) []string {
+	if headerVal == nil {
+		return nil
+	}
+	return []string{strings.Join(headerVal, ", ")}
+}
+
 func ExtractVaryHeaders(reqHeaders, respHeaders http.Header) http.Header {
-	// FIXME: we should normalize known headers
-	varyHeaders := normalizeVaryHeaders(respHeaders)
+	varyHeaders := getVaryHeaderNames(respHeaders)
 	relevantHeaders := http.Header{}
 
-	for header := range varyHeaders {
-		relevantHeaders[header] = reqHeaders[header]
+	for _, header := range varyHeaders {
+		relevantHeaders[header] = normalizeVaryHeaders(reqHeaders[header])
 	}
 
 	return relevantHeaders
 }
 
 func MatchVaryHeaders(reqHeaders, varyHeaders http.Header, logger *zerolog.Logger) bool {
+	if len(varyHeaders) == 0 {
+		return true
+	}
+
 	if _, ok := varyHeaders["*"]; ok {
 		return false
 	}
 
-	// FIXME: we should normalize known headers
 	for headerName, headerValue := range varyHeaders {
-		reqHeader := reqHeaders[headerName]
+		reqHeader := normalizeVaryHeaders(reqHeaders[headerName])
 		if len(reqHeader) != len(headerValue) {
 			logger.Debug().
 				Str("header", headerName).
@@ -56,15 +65,13 @@ func MatchVaryHeaders(reqHeaders, varyHeaders http.Header, logger *zerolog.Logge
 			return false
 		}
 
-		for i, val := range headerValue {
-			if val != reqHeader[i] {
-				logger.Debug().
-					Str("header", headerName).
-					Strs("currentHeaders", reqHeader).
-					Strs("originalHeaders", headerValue).
-					Msg("unable to reuse query without validating due to different headers")
-				return false
-			}
+		if len(reqHeader) == 1 && headerValue[0] != reqHeader[0] {
+			logger.Debug().
+				Str("header", headerName).
+				Strs("currentHeaders", reqHeader).
+				Strs("originalHeaders", headerValue).
+				Msg("unable to reuse query without validating due to different headers")
+			return false
 		}
 	}
 
