@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -35,17 +37,24 @@ type CacheControlResponseDirective struct {
 	StaleIfError         time.Duration
 }
 
-func ParseCacheControlDirective(header []string) (CacheControlResponseDirective, error) {
+func ParseCacheControlDirective(
+	header []string,
+	logger *zerolog.Logger,
+) (CacheControlResponseDirective, error) {
 	response := CacheControlResponseDirective{}
+	seen := make(map[string]struct{}, 0)
 
 	for _, hdr := range header {
 		for directive := range strings.SplitSeq(hdr, ",") {
 			key, val, found := strings.Cut(strings.TrimSpace(directive), "=")
+			if _, ok := seen[key]; ok {
+				continue // Duplicate entry, only the first value is valid
+			}
+			seen[key] = struct{}{}
 
 			if found {
 				switch key {
 				case "max-age":
-					// FIXME: only the first value should be used if it's mentioned multiple times
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
@@ -57,20 +66,23 @@ func ParseCacheControlDirective(header []string) (CacheControlResponseDirective,
 					response.MaxAge = time.Duration(v) * time.Second
 				// no-cache can be qualified or unqualified
 				// we only implement the unqualified version as it is simpler
-				// FIXME: add a tracelog if encountering no-cache with qualified
 				case "no-cache":
+					logger.Trace().
+						Str("directive", directive).
+						Msg("a qualified version of 'no-cache' has been encountered")
 					response.NoCache = true
 				// private can be qualified or unqualified
 				// we only implement the unqualified version as it is simpler
-				// FIXME: add a tracelog if encountering private with qualified
 				case "private":
+					logger.Trace().
+						Str("directive", directive).
+						Msg("a qualified version of 'private' has been encountered")
 					response.Private = true
-				case "s-max-age":
-					// FIXME: only the first value should be used if it's mentioned multiple times
+				case "s-maxage":
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
-							"%w for directive 's-max-age': %s",
+							"%w for directive 's-maxage': %s",
 							ErrInvalidArgument,
 							err,
 						)
@@ -97,7 +109,9 @@ func ParseCacheControlDirective(header []string) (CacheControlResponseDirective,
 					}
 					response.StaleIfError = time.Duration(v) * time.Second
 				default:
-					// FIXME: log
+					logger.Warn().
+						Str("directive", directive).
+						Msg("received an unknown directive in Cache-Control header")
 				}
 			} else {
 				switch key {
@@ -120,7 +134,7 @@ func ParseCacheControlDirective(header []string) (CacheControlResponseDirective,
 				case "immutable":
 					response.Immutable = true
 				default:
-					// FIXME: log
+					logger.Warn().Str("directive", directive).Msg("received an unknown directive in Cache-Control header")
 				}
 			}
 		}

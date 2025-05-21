@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
+	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
 func TestResponseIsCacheable(t *testing.T) {
@@ -31,7 +32,7 @@ func TestResponseIsCacheable(t *testing.T) {
 			t.Parallel()
 
 			resp := http.Response{StatusCode: tc.StatusCode, Header: tc.headers}
-			assert.Equal(t, tc.expected, httpcaching.IsCacheable(&resp))
+			assert.Equal(t, tc.expected, httpcaching.IsCacheable(&resp, testutils.TestLogger(t)))
 		})
 	}
 }

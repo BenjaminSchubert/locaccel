@@ -86,7 +86,10 @@ func (c *Client) serveFromCachedCandidates(
 	mostRecentCandidates := c.selectMostRecentCandidates(candidates, logger)
 
 	for _, resp := range mostRecentCandidates {
-		cacheControl, err := httpcaching.ParseCacheControlDirective(resp.Headers["Cache-Control"])
+		cacheControl, err := httpcaching.ParseCacheControlDirective(
+			resp.Headers["Cache-Control"],
+			logger,
+		)
 		if err != nil {
 			logger.Warn().Err(err).Msg("unable to parse cache control directives")
 		}
@@ -203,7 +206,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	if !httpcaching.IsCacheable(resp) {
+	if !httpcaching.IsCacheable(resp, logger) {
 		logger.Debug().Msg("request is not cacheable")
 		return resp, nil
 	}

@@ -22,7 +22,7 @@ func TestGetFreshness(t *testing.T) {
 		{
 			"s-max-age-precedence",
 			http.Header{
-				"Cache-Control": []string{"s-max-age=1, max-age=2"},
+				"Cache-Control": []string{"s-maxage=1, max-age=2"},
 				"Expires":       []string{"Sun, 01 Jan 2012 12:00:00 GMT"},
 			},
 			1,
@@ -54,7 +54,10 @@ func TestGetFreshness(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
-			cacheControl, err := ParseCacheControlDirective(tc.headers["Cache-Control"])
+			cacheControl, err := ParseCacheControlDirective(
+				tc.headers["Cache-Control"],
+				testutils.TestLogger(t),
+			)
 			require.NoError(t, err)
 			freshness := getFreshnessLifetime(tc.headers, cacheControl, testutils.TestLogger(t))
 			require.Equal(t, time.Second*time.Duration(tc.expected), freshness)

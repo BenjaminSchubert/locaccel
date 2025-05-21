@@ -7,9 +7,11 @@ package httpcaching
 
 import (
 	"net/http"
+
+	"github.com/rs/zerolog"
 )
 
-func IsCacheable(r *http.Response) bool {
+func IsCacheable(r *http.Response, logger *zerolog.Logger) bool {
 	// Implements RFC 9111 section 3
 	//
 	// A cache MUST NOT store a response to a request unless:
@@ -47,9 +49,9 @@ func IsCacheable(r *http.Response) bool {
 		return false
 	}
 
-	cacheControl, err := ParseCacheControlDirective(r.Header.Values("Cache-Control"))
+	cacheControl, err := ParseCacheControlDirective(r.Header.Values("Cache-Control"), logger)
 	if err != nil {
-		// FIXME: log
+		logger.Warn().Err(err).Msg("unable to parse cache control directive")
 		return false
 	}
 
