@@ -15,6 +15,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/admin"
+	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
 	"github.com/benjaminschubert/locaccel/internal/handlers/proxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/pypi"
@@ -46,6 +47,10 @@ func New(
 
 	for _, registry := range conf.PyPIRegistries {
 		srv.servers = append(srv.servers, setupPypiRegistry(conf, registry, client, logger))
+	}
+
+	for _, registry := range conf.NpmRegistries {
+		srv.servers = append(srv.servers, setupNpmRegistry(conf, registry, client, logger))
 	}
 
 	for _, proxy := range conf.Proxies {
@@ -136,6 +141,20 @@ func setupPypiRegistry(
 
 	handler := http.NewServeMux()
 	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client)
+
+	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+}
+
+func setupNpmRegistry(
+	conf *config.Config,
+	registry config.NpmRegistry,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+) serverInfo {
+	log := logger.With().Str("service", "npm["+registry.Upstream+"]").Logger()
+
+	handler := http.NewServeMux()
+	npm.RegisterHandler(registry.Upstream, registry.Scheme, handler, client)
 
 	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
 }

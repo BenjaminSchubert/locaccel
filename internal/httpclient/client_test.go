@@ -300,79 +300,116 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 func TestValidationEtag(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Cache-Control", "public, no-cache")
-		w.Header().Add("Etag", "Hello")
-
-		if slices.ContainsFunc(
-			r.Header["If-None-Match"],
-			func(e string) bool { return e == "Hello" },
-		) {
-			w.Header().Add("Stale", "1")
-			w.WriteHeader(http.StatusNotModified)
-			return
+	getEtag := func(t string) string {
+		switch t {
+		case "weak":
+			return "W/\"Hello\""
+		case "strong":
+			return "\"Hello\""
+		default:
+			panic("BUG")
 		}
+	}
 
-		_, err := w.Write([]byte("Hello!"))
-		assert.NoError(t, err)
-	}))
-	t.Cleanup(srv.Close)
+	for _, originalEtagType := range []string{"weak", "strong"} {
+		for _, validationEtagType := range []string{"weak", "strong"} {
+			t.Run(originalEtagType+"/"+validationEtagType, func(t *testing.T) {
+				t.Parallel()
 
-	// First request should get the answer
-	resp1, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{}) //nolint:bodyclose
-	assert.Equal(t, 200, resp1.StatusCode)
-	assert.Equal(t, "Hello!", body)
-	assert.Equal(
-		t,
-		http.Header{
-			"Cache-Control":  []string{"public, no-cache"},
-			"Content-Length": []string{"6"},
-			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           resp1.Header["Date"],
-			"Etag":           []string{"Hello"},
-		},
-		resp1.Header,
-	)
+				originalEtag := getEtag(originalEtagType)
+				validationEtag := getEtag(validationEtagType)
 
-	// Second request should revalidate
-	resp2, body := makeRequest(t, client, http.MethodGet, srv.URL, http.Header{}) //nolint:bodyclose
-	assert.Equal(t, 200, resp2.StatusCode)
-	assert.Equal(t, "Hello!", body)
-	assert.Equal(
-		t,
-		http.Header{
-			"Age":            []string{"0"},
-			"Cache-Control":  []string{"public, no-cache"},
-			"Content-Length": []string{"6"},
-			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           resp2.Header["Date"],
-			"Etag":           []string{"Hello"},
-			"Stale":          []string{"1"},
-		},
-		resp2.Header,
-	)
+				client, validateCache := setup(t)
 
-	validateCache(map[string]CachedResponses{
-		"GET+" + srv.URL: {
-			{
-				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
-				200,
-				http.Header{
-					"Cache-Control":  []string{"public, no-cache"},
-					"Content-Length": []string{"6"},
-					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp2.Header["Date"],
-					"Etag":           []string{"Hello"},
-					"Stale":          []string{"1"},
-				},
-				http.Header{},
-				time.Time{},
-				time.Time{},
-			},
-		},
-	})
+				srv := httptest.NewServer(
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Header().Add("Cache-Control", "public, no-cache")
+
+						if slices.ContainsFunc(
+							r.Header["If-None-Match"],
+							func(e string) bool { return e == originalEtag },
+						) {
+							w.Header().Add("Etag", validationEtag)
+							w.Header().Add("Stale", "1")
+							w.WriteHeader(http.StatusNotModified)
+							return
+						}
+
+						w.Header().Add("Etag", originalEtag)
+						_, err := w.Write([]byte("Hello!"))
+						assert.NoError(t, err)
+					}),
+				)
+				t.Cleanup(srv.Close)
+
+				// First request should get the answer
+				resp1, body := makeRequest( //nolint:bodyclose
+					t,
+					client,
+					http.MethodGet,
+					srv.URL,
+					http.Header{},
+				)
+				assert.Equal(t, 200, resp1.StatusCode)
+				assert.Equal(t, "Hello!", body)
+				assert.Equal(
+					t,
+					http.Header{
+						"Cache-Control":  []string{"public, no-cache"},
+						"Content-Length": []string{"6"},
+						"Content-Type":   []string{"text/plain; charset=utf-8"},
+						"Date":           resp1.Header["Date"],
+						"Etag":           []string{originalEtag},
+					},
+					resp1.Header,
+				)
+
+				// Second request should revalidate
+				resp2, body := makeRequest( //nolint:bodyclose
+					t,
+					client,
+					http.MethodGet,
+					srv.URL,
+					http.Header{},
+				)
+				assert.Equal(t, 200, resp2.StatusCode)
+				assert.Equal(t, "Hello!", body)
+				assert.Equal(
+					t,
+					http.Header{
+						"Age":            []string{"0"},
+						"Cache-Control":  []string{"public, no-cache"},
+						"Content-Length": []string{"6"},
+						"Content-Type":   []string{"text/plain; charset=utf-8"},
+						"Date":           resp2.Header["Date"],
+						"Etag":           []string{validationEtag},
+						"Stale":          []string{"1"},
+					},
+					resp2.Header,
+				)
+
+				validateCache(map[string]CachedResponses{
+					"GET+" + srv.URL: {
+						{
+							"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+							200,
+							http.Header{
+								"Cache-Control":  []string{"public, no-cache"},
+								"Content-Length": []string{"6"},
+								"Content-Type":   []string{"text/plain; charset=utf-8"},
+								"Date":           resp2.Header["Date"],
+								"Etag":           []string{validationEtag},
+								"Stale":          []string{"1"},
+							},
+							http.Header{},
+							time.Time{},
+							time.Time{},
+						},
+					},
+				})
+			})
+		}
+	}
 }
 
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {

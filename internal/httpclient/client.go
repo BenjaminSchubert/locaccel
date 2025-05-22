@@ -14,6 +14,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/filecache"
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
+	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpheaders"
 )
 
 var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
@@ -322,7 +323,7 @@ func (c *Client) updateCache(
 ) (*http.Response, error) {
 	if etag := resp.Header.Get("Etag"); etag != "" {
 		for _, cachedResp := range dbEntry.Value {
-			if cachedResp.Headers.Get("Etag") != etag {
+			if !httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("Etag")) {
 				continue
 			}
 
@@ -331,6 +332,8 @@ func (c *Client) updateCache(
 					cachedResp.Headers[key] = val
 				}
 			}
+
+			resp.Header = cachedResp.Headers
 
 			if err := c.db.Save(cacheKey, dbEntry); err != nil {
 				logger.Error().Err(err).Msg("Error updating the entry in the cache")

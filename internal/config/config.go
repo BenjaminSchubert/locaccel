@@ -9,6 +9,12 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
+type NpmRegistry struct {
+	Upstream string
+	Scheme   string
+	Port     uint16
+}
+
 type OciRegistry struct {
 	Upstream string
 	Port     uint16
@@ -58,6 +64,7 @@ type Config struct {
 	AdminInterface  string `yaml:"admin_interface"`
 	EnableProfiling bool   `yaml:"profiling"`
 	Log             Log
+	NpmRegistries   []NpmRegistry  `yaml:"npm_registries"`
 	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
 	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
 	Proxies         []Proxy
@@ -98,6 +105,9 @@ func Default() *Config {
 		{"https://registry-1.docker.io", 3131},
 		{"https://gcr.io", 3132},
 		{"https://quay.io", 3133},
+	}
+	conf.NpmRegistries = []NpmRegistry{
+		{"https://registry.npmjs.org/", "http", 3135},
 	}
 	conf.PyPIRegistries = []PyPIRegistry{
 		{"https://pypi.org/", "https://files.pythonhosted.org", 3134},
