@@ -228,12 +228,13 @@ func (c *Client) addConditionalRequestInformation(
 	req *http.Request,
 	dbEntry *database.Entry[CachedResponses],
 ) bool {
-	// FIXME: add If-Not-Modified-Since
-
 	etags := []string{}
+	lastModified := []string{}
 
 	for _, entry := range dbEntry.Value {
 		etags = append(etags, entry.Headers["Etag"]...)
+		lastModified = append(lastModified, entry.Headers["Last-Modified"]...)
+
 	}
 
 	if len(etags) != 0 {
@@ -246,7 +247,16 @@ func (c *Client) addConditionalRequestInformation(
 		req.Header["If-None-Match"] = []string{strings.Join(etags, ", ")}
 	}
 
-	return len(etags) != 0
+	if len(lastModified) != 0 {
+		originalLastModified := req.Header["If-Unmodified-Since"]
+		if originalLastModified != nil {
+			lastModified = append(lastModified, originalLastModified...)
+		}
+
+		req.Header["If-Unmodified-Since"] = []string{strings.Join(lastModified, ", ")}
+	}
+
+	return len(etags) != 0 || len(lastModified) != 0
 }
 
 func (c *Client) forwardRequest(
@@ -322,51 +332,86 @@ func (c *Client) updateCache(
 	logger *zerolog.Logger,
 ) (*http.Response, error) {
 	if etag := resp.Header.Get("Etag"); etag != "" {
-		for _, cachedResp := range dbEntry.Value {
-			if !httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("Etag")) {
-				continue
+		for idx, cachedResp := range dbEntry.Value {
+			if httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("Etag")) {
+				return c.refreshResponseAndServe(
+					cacheKey,
+					dbEntry,
+					idx,
+					resp,
+					timeAtRequestCreated,
+					timeAtResponseReceived,
+					logger,
+				), nil
 			}
+		}
+	}
 
-			for key, val := range resp.Header {
-				if key != "Content-Length" {
-					cachedResp.Headers[key] = val
-				}
+	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
+		for idx, cachedResp := range dbEntry.Value {
+			if lastModified == cachedResp.Headers.Get("Last-Modified") {
+				return c.refreshResponseAndServe(
+					cacheKey,
+					dbEntry,
+					idx,
+					resp,
+					timeAtRequestCreated,
+					timeAtResponseReceived,
+					logger,
+				), nil
 			}
-
-			resp.Header = cachedResp.Headers
-
-			if err := c.db.Save(cacheKey, dbEntry); err != nil {
-				logger.Error().Err(err).Msg("Error updating the entry in the cache")
-			}
-
-			body, err := c.cache.Open(cachedResp.ContentHash, logger)
-			if err != nil {
-				// FIXME: delete entry, it's useless now
-				panic("Unable to serve cached entry")
-			}
-			if err := resp.Body.Close(); err != nil {
-				logger.Error().Err(err).Msg("Error closing upstream request body")
-			}
-
-			resp := &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       body,
-				Header:     cachedResp.Headers.Clone(),
-			}
-
-			age := httpcaching.GetCurrentAge(
-				resp.Header,
-				timeAtRequestCreated,
-				timeAtResponseReceived,
-				logger,
-			)
-			resp.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
-
-			return resp, nil
 		}
 	}
 
 	return resp, errNoMatchingEntryInCache
+}
+
+func (c *Client) refreshResponseAndServe(
+	cacheKey string,
+	dbEntry *database.Entry[CachedResponses],
+	idx int,
+	resp *http.Response,
+	timeAtRequestCreated, timeAtResponseReceived time.Time,
+	logger *zerolog.Logger,
+) *http.Response {
+	cachedResp := dbEntry.Value[idx]
+
+	for key, val := range resp.Header {
+		if key != "Content-Length" {
+			cachedResp.Headers[key] = val
+		}
+	}
+
+	resp.Header = cachedResp.Headers
+
+	if err := c.db.Save(cacheKey, dbEntry); err != nil {
+		logger.Error().Err(err).Msg("Error updating the entry in the cache")
+	}
+
+	body, err := c.cache.Open(cachedResp.ContentHash, logger)
+	if err != nil {
+		// FIXME: delete entry, it's useless now
+		panic("Unable to serve cached entry")
+	}
+	if err := resp.Body.Close(); err != nil {
+		logger.Error().Err(err).Msg("Error closing upstream request body")
+	}
+
+	r := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       body,
+		Header:     cachedResp.Headers.Clone(),
+	}
+
+	age := httpcaching.GetCurrentAge(
+		r.Header,
+		timeAtRequestCreated,
+		timeAtResponseReceived,
+		logger,
+	)
+	r.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
+
+	return r
 }
 
 func removeHopByHopHeaders(headers http.Header) {

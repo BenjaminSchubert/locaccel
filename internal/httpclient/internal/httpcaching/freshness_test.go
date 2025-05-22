@@ -44,6 +44,14 @@ func TestGetFreshness(t *testing.T) {
 			3600,
 		},
 		{
+			"last-modified",
+			http.Header{
+				"Last-Modified": []string{"Sun, 01 Jan 2012 00:00:00 GMT"},
+				"Date":          []string{"Sun, 01 Jan 2012 10:00:00 GMT"},
+			},
+			3600,
+		},
+		{
 			"default-if-invalid-expires",
 			http.Header{
 				"Expires": []string{"hi"},

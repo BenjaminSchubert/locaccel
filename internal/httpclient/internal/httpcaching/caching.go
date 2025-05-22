@@ -81,11 +81,16 @@ func IsCacheable(r *http.Response, logger *zerolog.Logger) bool {
 		return true
 	}
 
-	// FIXME: implement
 	// If the response has a Last-Modified header field (Section 8.8.2 of RFC 9110),
 	// caches are encouraged to use a heuristic expiration value that is no more
 	// than some fraction of the interval since that time. A typical setting of
 	// this fraction might be 10%.
+	if val := r.Header.Get("Last-Modified"); val != "" {
+		if _, err = http.ParseTime(val); err == nil {
+			return true
+		}
+		logger.Warn().Err(err).Msg("unable to parse Last-Modified header")
+	}
 
 	// Be safe, don't cache otherwise
 	return false

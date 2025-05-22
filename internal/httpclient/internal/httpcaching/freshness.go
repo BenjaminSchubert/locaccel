@@ -17,6 +17,8 @@ func getFreshnessLifetime(
 	logger *zerolog.Logger,
 ) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.1
+	// and https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.2
+
 	if cacheControl.SMaxAge != 0 {
 		return cacheControl.SMaxAge
 	}
@@ -37,7 +39,19 @@ func getFreshnessLifetime(
 		}
 	}
 
-	// FIXME: implement https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.2
+	if lastModified := headers.Get("Last-Modified"); lastModified != "" {
+		modified, err := http.ParseTime(lastModified)
+		if err != nil {
+			logger.Warn().Err(err).Msg("Last-Modified header is in an invalid format")
+		} else {
+			date, err := http.ParseTime(headers.Get("Date"))
+			if err == nil {
+				return date.Sub(modified) / 10
+			}
+			logger.Error().Err(err).Msg("BUG: Date header is in an invalid format, which should not happen")
+
+		}
+	}
 	return 0
 }
 

@@ -204,6 +204,58 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	)
 }
 
+func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
+	t.Parallel()
+
+	client, _ := setup(t)
+
+	wasCalled := false
+	lastModified := time.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.False(t, wasCalled, "The service did not serve the request from cache")
+		w.Header().Add("Last-Modified", lastModified)
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+		wasCalled = true
+	}))
+	t.Cleanup(srv.Close)
+
+	// Initial Query
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+
+	date := resp.Header["Date"]
+
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           date,
+			"Last-Modified":  []string{lastModified},
+		},
+		resp.Header,
+	)
+
+	// Second Query
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Age":            []string{"0"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           date,
+			"Last-Modified":  []string{lastModified},
+		},
+		resp.Header,
+	)
+}
+
 func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	t.Parallel()
 
@@ -410,6 +462,95 @@ func TestValidationEtag(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestValidationLastModified(t *testing.T) {
+	t.Parallel()
+	client, validateCache := setup(t)
+
+	lastModified := time.Now().UTC().Format(http.TimeFormat)
+
+	srv := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Last-Modified", lastModified)
+
+			if slices.ContainsFunc(
+				r.Header["If-Unmodified-Since"],
+				func(m string) bool { return m == lastModified },
+			) {
+				w.Header().Add("Stale", "1")
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+
+			_, err := w.Write([]byte("Hello!"))
+			assert.NoError(t, err)
+		}),
+	)
+	t.Cleanup(srv.Close)
+
+	// First request should get the answer
+	resp1, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{},
+	)
+	assert.Equal(t, 200, resp1.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           resp1.Header["Date"],
+			"Last-Modified":  []string{lastModified},
+		},
+		resp1.Header,
+	)
+
+	// Second request should revalidate
+	resp2, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{},
+	)
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello!", body)
+	assert.Equal(
+		t,
+		http.Header{
+			"Age":            []string{"0"},
+			"Content-Length": []string{"6"},
+			"Content-Type":   []string{"text/plain; charset=utf-8"},
+			"Date":           resp2.Header["Date"],
+			"Last-Modified":  []string{lastModified},
+			"Stale":          []string{"1"},
+		},
+		resp2.Header,
+	)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp2.Header["Date"],
+					"Last-Modified":  []string{lastModified},
+					"Stale":          []string{"1"},
+				},
+				http.Header{},
+				time.Time{},
+				time.Time{},
+			},
+		},
+	})
 }
 
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
