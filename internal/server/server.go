@@ -15,6 +15,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/admin"
+	"github.com/benjaminschubert/locaccel/internal/handlers/goproxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
 	"github.com/benjaminschubert/locaccel/internal/handlers/proxy"
@@ -40,6 +41,10 @@ func New(
 	logger *zerolog.Logger,
 ) *Server {
 	srv := Server{logger: logger}
+
+	for _, proxy := range conf.GoProxies {
+		srv.servers = append(srv.servers, setupGoProxy(conf, proxy, client, logger))
+	}
 
 	for _, registry := range conf.OciRegistries {
 		srv.servers = append(srv.servers, setupOciRegistry(conf, registry, client, logger))
@@ -115,6 +120,20 @@ func (s *Server) ListenAndServe() error {
 	}
 
 	return lastErr
+}
+
+func setupGoProxy(
+	conf *config.Config,
+	goProxy config.GoProxy,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+) serverInfo {
+	log := logger.With().Str("service", "go["+goProxy.Upstream+"]").Logger()
+
+	handler := http.NewServeMux()
+	goproxy.RegisterHandler(goProxy.Upstream, handler, client)
+
+	return createServer(fmt.Sprintf("%s:%d", conf.Host, goProxy.Port), handler, &log)
 }
 
 func setupOciRegistry(

@@ -9,6 +9,10 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
+type GoProxy struct {
+	Upstream string
+	Port     uint16
+}
 type NpmRegistry struct {
 	Upstream string
 	Scheme   string
@@ -64,6 +68,7 @@ type Config struct {
 	AdminInterface  string `yaml:"admin_interface"`
 	EnableProfiling bool   `yaml:"profiling"`
 	Log             Log
+	GoProxies       []GoProxy      `yaml:"go_proxies"`
 	NpmRegistries   []NpmRegistry  `yaml:"npm_registries"`
 	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
 	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
@@ -101,6 +106,9 @@ func Parse(configPath string) (*Config, error) {
 
 func Default() *Config {
 	conf := getBaseConfig()
+	conf.GoProxies = []GoProxy{
+		{"https://proxy.golang.org", 3136},
+	}
 	conf.OciRegistries = []OciRegistry{
 		{"https://registry-1.docker.io", 3131},
 		{"https://gcr.io", 3132},
