@@ -14,8 +14,7 @@ type CachedResponse struct {
 	StatusCode             int
 	Headers                http.Header
 	VaryHeaders            http.Header
-	TimeAtRequestCreated   time.Time
-	TimeAtResponseReceived time.Time
+	TimeAtResponseCreation time.Time
 }
 
 type CachedResponses []CachedResponse

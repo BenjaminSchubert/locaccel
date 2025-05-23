@@ -37,15 +37,12 @@ func validateCache(
 		t.Context(),
 		func(key string, value *database.Entry[CachedResponses]) error {
 			for i := range value.Value {
-				assert.Greater(t, value.Value[i].TimeAtRequestCreated, startTime)
-				assert.Greater(
+				assert.GreaterOrEqual(
 					t,
-					value.Value[i].TimeAtResponseReceived,
-					value.Value[i].TimeAtRequestCreated,
+					value.Value[i].TimeAtResponseCreation,
+					startTime.Truncate(time.Second),
 				)
-
-				value.Value[i].TimeAtRequestCreated = time.Time{}
-				value.Value[i].TimeAtResponseReceived = time.Time{}
+				value.Value[i].TimeAtResponseCreation = time.Time{}
 			}
 
 			entriesInDB[key] = value.Value
@@ -84,8 +81,7 @@ func addEntry(t *testing.T, cache *Cache, key string, data []string) {
 
 	responses := make(CachedResponses, len(data))
 	for i, d := range data {
-		responses[i].TimeAtRequestCreated = time.Now()
-		responses[i].TimeAtResponseReceived = time.Now().Add(time.Second)
+		responses[i].TimeAtResponseCreation = time.Now()
 		responses[i].StatusCode = http.StatusOK
 		responses[i].ContentHash = ingest(t, cache, d)
 	}
@@ -149,7 +145,7 @@ func TestCanGetStatistics(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(
 		t,
-		CacheStatistics{units.Bytes{Bytes: 603}, 4, units.Bytes{Bytes: 27}, 5, map[string]struct {
+		CacheStatistics{units.Bytes{Bytes: 528}, 4, units.Bytes{Bytes: 27}, 5, map[string]struct {
 			Entries int64
 			Size    units.Bytes
 		}{"one.test": {1, units.Bytes{Bytes: 3}}, "two.test": {2, units.Bytes{Bytes: 10}}, "three.test": {2, units.Bytes{Bytes: 14}}}},
@@ -185,7 +181,6 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 			http.StatusOK,
 			http.Header{},
 			http.Header{},
-			time.Time{},
 			time.Time{},
 		},
 	}}, startTime)
@@ -248,7 +243,6 @@ func TestCanCleanOldEntries(t *testing.T) {
 					http.Header{},
 					http.Header{},
 					time.Time{},
-					time.Time{},
 				},
 			},
 			"https://two.test": {
@@ -257,7 +251,6 @@ func TestCanCleanOldEntries(t *testing.T) {
 					http.StatusOK,
 					http.Header{},
 					http.Header{},
-					time.Time{},
 					time.Time{},
 				},
 			},

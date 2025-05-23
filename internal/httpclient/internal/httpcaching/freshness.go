@@ -55,14 +55,14 @@ func getFreshnessLifetime(
 	return 0
 }
 
-func GetCurrentAge(
+func GetEstimatedResponseCreation(
 	headers http.Header,
 	requestTime, responseTime time.Time,
 	logger *zerolog.Logger,
-) time.Duration {
+) time.Time {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.3
-	// FIXME: can we precompute most of this and avoid storing this additional data?
-
+	// This initial part computes the approximate date at which the response was
+	// actually created
 	ageStr := headers.Get("Age")
 	age := 0
 
@@ -90,20 +90,23 @@ func GetCurrentAge(
 	responseDelay := responseTime.Sub(requestTime)
 	correctedAgeValue := (time.Second * time.Duration(age)) + responseDelay
 
-	correctedInitialAge := max(apparentAge, correctedAgeValue)
+	return responseTime.Add(-max(apparentAge, correctedAgeValue))
+}
 
-	residentTime := time.Since(responseTime)
-
-	return (correctedInitialAge + residentTime).Truncate(time.Second)
+func GetCurrentAge(responseCreationTime time.Time) time.Duration {
+	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.3
+	// The responseCreationTime expects to be computed from the
+	// GetEstimatedResponseCreation function
+	return time.Since(responseCreationTime).Truncate(time.Second)
 }
 
 func IsFresh(
 	headers http.Header,
 	cacheControl CacheControlResponseDirective,
-	requestTime, responseTime time.Time,
+	responseCreationTime time.Time,
 	logger *zerolog.Logger,
 ) (time.Duration, bool) {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2
-	age := GetCurrentAge(headers, requestTime, responseTime, logger)
+	age := GetCurrentAge(responseCreationTime)
 	return age, getFreshnessLifetime(headers, cacheControl, logger) > age
 }

@@ -76,7 +76,7 @@ func TestGetFreshness(t *testing.T) {
 func TestGetCurrentAge(t *testing.T) {
 	t.Parallel()
 
-	age := GetCurrentAge(
+	estimatedResponseCreation := GetEstimatedResponseCreation(
 		http.Header{
 			"Age":  []string{"60"},
 			"Date": []string{time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
@@ -85,6 +85,13 @@ func TestGetCurrentAge(t *testing.T) {
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),
 	)
+	require.Equal(
+		t,
+		time.Now().Add(-time.Second*120).Truncate(time.Second),
+		estimatedResponseCreation.Truncate(time.Second),
+	)
+
+	age := GetCurrentAge(estimatedResponseCreation)
 	require.Equal(t, time.Second*time.Duration(120), age)
 }
 
@@ -99,8 +106,7 @@ func TestIsFresh(t *testing.T) {
 			},
 		},
 		CacheControlResponseDirective{SMaxAge: 300 * time.Second},
-		time.Now().Add(-time.Second*40),
-		time.Now().Add(-time.Second*30),
+		time.Now().Add(-time.Second*120),
 		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)
@@ -118,8 +124,7 @@ func TestIsNotFresh(t *testing.T) {
 			},
 		},
 		CacheControlResponseDirective{SMaxAge: 30 * time.Second},
-		time.Now().Add(-time.Second*40),
-		time.Now().Add(-time.Second*30),
+		time.Now().Add(-time.Second*120),
 		testutils.TestLogger(t),
 	)
 	assert.Equal(t, time.Second*120, age)

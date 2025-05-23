@@ -102,8 +102,7 @@ func (c *Client) serveFromCachedCandidates(
 		age, isFresh := httpcaching.IsFresh(
 			resp.Headers,
 			cacheControl,
-			resp.TimeAtRequestCreated,
-			resp.TimeAtResponseReceived,
+			resp.TimeAtResponseCreation,
 			logger,
 		)
 		if isFresh || forceStale {
@@ -303,8 +302,12 @@ func (c *Client) setupIngestion(
 				resp.StatusCode,
 				resp.Header,
 				httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
-				timeAtRequestCreated,
-				timeAtResponseReceived,
+				httpcaching.GetEstimatedResponseCreation(
+					resp.Header,
+					timeAtRequestCreated,
+					timeAtResponseReceived,
+					logger,
+				),
 			}
 
 			if dbEntry != nil {
@@ -381,6 +384,12 @@ func (c *Client) refreshResponseAndServe(
 			cachedResp.Headers[key] = val
 		}
 	}
+	cachedResp.TimeAtResponseCreation = httpcaching.GetEstimatedResponseCreation(
+		resp.Header,
+		timeAtRequestCreated,
+		timeAtResponseReceived,
+		logger,
+	)
 
 	resp.Header = cachedResp.Headers
 
@@ -403,12 +412,7 @@ func (c *Client) refreshResponseAndServe(
 		Header:     cachedResp.Headers.Clone(),
 	}
 
-	age := httpcaching.GetCurrentAge(
-		r.Header,
-		timeAtRequestCreated,
-		timeAtResponseReceived,
-		logger,
-	)
+	age := httpcaching.GetCurrentAge(cachedResp.TimeAtResponseCreation)
 	r.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 
 	return r

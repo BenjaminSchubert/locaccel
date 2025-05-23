@@ -147,7 +147,6 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 				},
 				http.Header{},
 				time.Time{},
-				time.Time{},
 			},
 		},
 	})
@@ -329,7 +328,6 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 				},
 				http.Header{"Count": []string{"1"}},
 				time.Time{},
-				time.Time{},
 			},
 			{
 				"bab02792998098aa075831b5c79424be14f4d50f316cf555d4d54250258dda6a",
@@ -342,7 +340,6 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 					"Vary":           []string{"Count"},
 				},
 				http.Header{"Count": []string{"2"}},
-				time.Time{},
 				time.Time{},
 			},
 		},
@@ -455,7 +452,6 @@ func TestValidationEtag(t *testing.T) {
 							},
 							http.Header{},
 							time.Time{},
-							time.Time{},
 						},
 					},
 				})
@@ -546,7 +542,6 @@ func TestValidationLastModified(t *testing.T) {
 					"Stale":          []string{"1"},
 				},
 				http.Header{},
-				time.Time{},
 				time.Time{},
 			},
 		},
