@@ -108,7 +108,7 @@ func (c *Client) serveFromCachedCandidates(
 		if isFresh || forceStale {
 			body, err := c.cache.Open(resp.ContentHash, logger)
 			if err != nil {
-				// FIXME: delete entry, it's useless now
+				logger.Warn().Err(err).Msg("Entry has been pruned from the cache already")
 				continue
 			}
 
@@ -399,8 +399,7 @@ func (c *Client) refreshResponseAndServe(
 
 	body, err := c.cache.Open(cachedResp.ContentHash, logger)
 	if err != nil {
-		// FIXME: delete entry, it's useless now
-		panic("Unable to serve cached entry")
+		logger.Panic().Err(err).Msg("Unable to serve cached entry")
 	}
 	if err := resp.Body.Close(); err != nil {
 		logger.Error().Err(err).Msg("Error closing upstream request body")

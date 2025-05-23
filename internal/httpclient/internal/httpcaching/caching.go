@@ -44,7 +44,6 @@ func IsCacheable(r *http.Response, logger *zerolog.Logger) bool {
 	// used in those fields.
 
 	// Reasons it cannot be cached
-	// FIXME: can we cache other status codes?
 	if r.StatusCode != http.StatusOK {
 		return false
 	}
