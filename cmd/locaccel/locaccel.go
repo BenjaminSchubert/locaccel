@@ -79,7 +79,7 @@ func main() {
 		}
 	}()
 
-	cachingClient := httpclient.New(client, cache, &logger)
+	cachingClient := httpclient.New(client, cache, &logger, conf.Cache.Private)
 
 	srv := server.New(conf, cachingClient, cache, &logger)
 	if err := srv.ListenAndServe(); err != nil {

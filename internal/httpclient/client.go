@@ -20,13 +20,14 @@ import (
 var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
 
 type Client struct {
-	client *http.Client
-	db     *database.Database[CachedResponses, *CachedResponses]
-	cache  *filecache.FileCache
+	client    *http.Client
+	db        *database.Database[CachedResponses, *CachedResponses]
+	cache     *filecache.FileCache
+	isPrivate bool
 }
 
-func New(client *http.Client, cache *Cache, logger *zerolog.Logger) *Client {
-	return &Client{client, cache.db, cache.cache}
+func New(client *http.Client, cache *Cache, logger *zerolog.Logger, isPrivate bool) *Client {
+	return &Client{client, cache.db, cache.cache, isPrivate}
 }
 
 func buildKey(req *http.Request) string {
@@ -206,7 +207,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
-	if !httpcaching.IsCacheable(resp, logger) {
+	if !httpcaching.IsCacheable(resp, c.isPrivate, logger) {
 		logger.Debug().Msg("request is not cacheable")
 		return resp, nil
 	}

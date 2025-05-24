@@ -29,7 +29,7 @@ func setup(t *testing.T) (client *Client, valCache func(map[string]CachedRespons
 
 	currentTime := time.Now()
 
-	return New(&http.Client{}, cache, logger), func(expected map[string]CachedResponses) {
+	return New(&http.Client{}, cache, logger, false), func(expected map[string]CachedResponses) {
 		validateCache(t, cache, expected, currentTime)
 	}
 }

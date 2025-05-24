@@ -24,6 +24,7 @@ func TestCanParseValidConfiguration(t *testing.T) {
 host: 0.0.0.0
 cache:
   path: ./cache
+  private: true
   quota_low: 1
   quota_high: 10
 admin_interface: localhost:8192
@@ -50,6 +51,7 @@ pypi_registries:
 			Host: "0.0.0.0",
 			Cache: config.Cache{
 				"./cache",
+				true,
 				units.NewDiskQuotaInBytes(units.Bytes{Bytes: 1}),
 				units.NewDiskQuotaInBytes(units.Bytes{Bytes: 10}),
 			},

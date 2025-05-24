@@ -2,7 +2,6 @@
 //
 //		Useful links:
 //	   - RFC 9110 (HTTP semantics): https://datatracker.ietf.org/doc/html/rfc9110
-//			-
 package httpcaching
 
 import (
@@ -11,7 +10,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func IsCacheable(r *http.Response, logger *zerolog.Logger) bool {
+func IsCacheable(r *http.Response, isPrivate bool, logger *zerolog.Logger) bool {
 	// Implements RFC 9111 section 3
 	//
 	// A cache MUST NOT store a response to a request unless:
@@ -54,21 +53,25 @@ func IsCacheable(r *http.Response, logger *zerolog.Logger) bool {
 		return false
 	}
 
-	if cacheControl.NoStore || cacheControl.Private {
-		return false
-	}
-
-	if _, ok := r.Header["Authorization"]; ok {
-		if !cacheControl.MustRevalidate && !cacheControl.Public && cacheControl.SMaxAge == 0 {
-			return false
-		}
-	}
-
 	if _, ok := r.Header["Range"]; ok {
 		return false
 	}
 	if _, ok := r.Header["Content-Range"]; ok {
 		return false
+	}
+
+	if cacheControl.NoStore {
+		return false
+	}
+
+	if cacheControl.Private {
+		return isPrivate
+	}
+
+	if _, ok := r.Header["Authorization"]; ok && !isPrivate {
+		if !cacheControl.MustRevalidate && !cacheControl.Public && cacheControl.SMaxAge == 0 {
+			return false
+		}
 	}
 
 	// Reasons it could be cached

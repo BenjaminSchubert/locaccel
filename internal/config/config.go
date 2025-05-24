@@ -42,6 +42,7 @@ type Log struct {
 
 type Cache struct {
 	Path      string
+	Private   bool
 	QuotaLow  units.DiskQuota `yaml:"quota_low"`
 	QuotaHigh units.DiskQuota `yaml:"quota_high"`
 }
@@ -80,6 +81,7 @@ func getBaseConfig() *Config {
 		Host: "localhost",
 		Cache: Cache{
 			"_cache/",
+			false,
 			units.NewDiskQuotaInPercent(10),
 			units.NewDiskQuotaInPercent(20),
 		},
