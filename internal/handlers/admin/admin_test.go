@@ -7,6 +7,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,7 +38,9 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 	})
 
 	require.NoError(t, admin.RegisterHandler(handler, cache, config.Default()))
-	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(handler, "admin", logger, prometheus.NewPedanticRegistry()),
+	)
 	defer server.Close()
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)

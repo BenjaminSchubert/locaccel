@@ -5,11 +5,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/rs/zerolog"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/logging"
+	"github.com/benjaminschubert/locaccel/internal/middleware"
 	"github.com/benjaminschubert/locaccel/internal/server"
 )
 
@@ -79,9 +82,21 @@ func main() {
 		}
 	}()
 
-	cachingClient := httpclient.New(client, cache, &logger, conf.Cache.Private)
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
 
-	srv := server.New(conf, cachingClient, cache, &logger)
+	cachingClient := httpclient.New(
+		client,
+		cache,
+		&logger,
+		conf.Cache.Private,
+		middleware.SetCacheState,
+	)
+
+	srv := server.New(conf, cachingClient, cache, &logger, registry)
 	if err := srv.ListenAndServe(); err != nil {
 		logger.Panic().Err(err).Msg("An error occurred while shutting down the server")
 	}

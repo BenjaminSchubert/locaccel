@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
@@ -39,31 +41,47 @@ func New(
 	client *httpclient.Client,
 	cache *httpclient.Cache,
 	logger *zerolog.Logger,
+	metricsRegistry interface {
+		prometheus.Registerer
+		prometheus.Gatherer
+	},
 ) *Server {
 	srv := Server{logger: logger}
 
 	for _, proxy := range conf.GoProxies {
-		srv.servers = append(srv.servers, setupGoProxy(conf, proxy, client, logger))
+		srv.servers = append(
+			srv.servers,
+			setupGoProxy(conf, proxy, client, logger, metricsRegistry),
+		)
 	}
 
 	for _, registry := range conf.OciRegistries {
-		srv.servers = append(srv.servers, setupOciRegistry(conf, registry, client, logger))
+		srv.servers = append(
+			srv.servers,
+			setupOciRegistry(conf, registry, client, logger, metricsRegistry),
+		)
 	}
 
 	for _, registry := range conf.PyPIRegistries {
-		srv.servers = append(srv.servers, setupPypiRegistry(conf, registry, client, logger))
+		srv.servers = append(
+			srv.servers,
+			setupPypiRegistry(conf, registry, client, logger, metricsRegistry),
+		)
 	}
 
 	for _, registry := range conf.NpmRegistries {
-		srv.servers = append(srv.servers, setupNpmRegistry(conf, registry, client, logger))
+		srv.servers = append(
+			srv.servers,
+			setupNpmRegistry(conf, registry, client, logger, metricsRegistry),
+		)
 	}
 
 	for _, proxy := range conf.Proxies {
-		srv.servers = append(srv.servers, setupProxy(conf, proxy, client, logger))
+		srv.servers = append(srv.servers, setupProxy(conf, proxy, client, logger, metricsRegistry))
 	}
 
 	if conf.AdminInterface != "" {
-		srv.servers = append(srv.servers, setupAdminInterface(conf, cache, logger))
+		srv.servers = append(srv.servers, setupAdminInterface(conf, cache, logger, metricsRegistry))
 	} else if conf.EnableProfiling {
 		logger.Warn().Msg("Profiling requested, but the admin interface is disabled. Ignoring.")
 	}
@@ -127,13 +145,21 @@ func setupGoProxy(
 	goProxy config.GoProxy,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
+	registry prometheus.Registerer,
 ) serverInfo {
-	log := logger.With().Str("service", "go["+goProxy.Upstream+"]").Logger()
+	serviceName := "go[" + goProxy.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 	goproxy.RegisterHandler(goProxy.Upstream, handler, client)
 
-	return createServer(fmt.Sprintf("%s:%d", conf.Host, goProxy.Port), handler, &log)
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, goProxy.Port),
+		handler,
+		serviceName,
+		&log,
+		registry,
+	)
 }
 
 func setupOciRegistry(
@@ -141,13 +167,21 @@ func setupOciRegistry(
 	registry config.OciRegistry,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
+	metricsRegistry prometheus.Registerer,
 ) serverInfo {
-	log := logger.With().Str("service", "oci["+registry.Upstream+"]").Logger()
+	serviceName := "oci[" + registry.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 	oci.RegisterHandler(registry.Upstream, handler, client)
 
-	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
+		handler,
+		serviceName,
+		&log,
+		metricsRegistry,
+	)
 }
 
 func setupPypiRegistry(
@@ -155,13 +189,21 @@ func setupPypiRegistry(
 	registry config.PyPIRegistry,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
+	metricsRegistry prometheus.Registerer,
 ) serverInfo {
-	log := logger.With().Str("service", "pypi["+registry.Upstream+"]").Logger()
+	serviceName := "pypi[" + registry.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client)
 
-	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
+		handler,
+		serviceName,
+		&log,
+		metricsRegistry,
+	)
 }
 
 func setupNpmRegistry(
@@ -169,13 +211,21 @@ func setupNpmRegistry(
 	registry config.NpmRegistry,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
+	metricsRegistry prometheus.Registerer,
 ) serverInfo {
-	log := logger.With().Str("service", "npm["+registry.Upstream+"]").Logger()
+	serviceName := "npm[" + registry.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 	npm.RegisterHandler(registry.Upstream, registry.Scheme, handler, client)
 
-	return createServer(fmt.Sprintf("%s:%d", conf.Host, registry.Port), handler, &log)
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
+		handler,
+		serviceName,
+		&log,
+		metricsRegistry,
+	)
 }
 
 func setupProxy(
@@ -183,21 +233,34 @@ func setupProxy(
 	proxyConf config.Proxy,
 	client *httpclient.Client,
 	logger *zerolog.Logger,
+	registry prometheus.Registerer,
 ) serverInfo {
-	log := logger.With().Str("service", "proxy").Logger()
+	serviceName := "proxy"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 	proxy.RegisterHandler(proxyConf.AllowedUpstreams, handler, client)
 
-	return createServer(fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port), handler, &log)
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port),
+		handler,
+		serviceName,
+		&log,
+		registry,
+	)
 }
 
 func setupAdminInterface(
 	conf *config.Config,
 	cache *httpclient.Cache,
 	logger *zerolog.Logger,
+	registry interface {
+		prometheus.Registerer
+		prometheus.Gatherer
+	},
 ) serverInfo {
-	log := logger.With().Str("service", "admin").Logger()
+	serviceName := "admin"
+	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
 
@@ -208,20 +271,36 @@ func setupAdminInterface(
 		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
 	}
 
+	if conf.EnableMetrics {
+		log.Info().
+			Str("metricsUrl", conf.AdminInterface+"/metrics").
+			Msg("Enabling metrics")
+		handler.Handle(
+			"GET /metrics",
+			promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+
+	}
+
 	if err := admin.RegisterHandler(handler, cache, conf); err != nil {
 		logger.Panic().Err(err).Msg("unable to initialize server properly")
 	}
 
-	return createServer(conf.AdminInterface, handler, &log)
+	return createServer(conf.AdminInterface, handler, serviceName, &log, registry)
 }
 
-func createServer(address string, handler *http.ServeMux, log *zerolog.Logger) serverInfo {
+func createServer(
+	address string,
+	handler *http.ServeMux,
+	serviceName string,
+	log *zerolog.Logger,
+	registry prometheus.Registerer,
+) serverInfo {
 	handler.HandleFunc("/", handlers.NotImplemented)
 
 	return serverInfo{
 		&http.Server{
 			Addr:         address,
-			Handler:      middleware.ApplyAllMiddlewares(handler, log),
+			Handler:      middleware.ApplyAllMiddlewares(handler, serviceName, log, registry),
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 5 * time.Minute,
 			ErrorLog:     stdlog.New(log, "", 0),

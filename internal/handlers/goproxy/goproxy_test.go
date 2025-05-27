@@ -8,6 +8,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers/goproxy"
@@ -25,7 +26,9 @@ func TestInstallGoPackages(t *testing.T) {
 
 	handler := &http.ServeMux{}
 	goproxy.RegisterHandler("https://proxy.golang.org", handler, testutils.NewClient(t, logger))
-	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(handler, "go", logger, prometheus.NewPedanticRegistry()),
+	)
 	defer server.Close()
 
 	cwd, err := os.Getwd()

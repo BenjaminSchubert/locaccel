@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,7 +37,14 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 
 			handler := &http.ServeMux{}
 			proxy.RegisterHandler(tc.allowed_upstreams, handler, testutils.NewClient(t, logger))
-			server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+			server := httptest.NewServer(
+				middleware.ApplyAllMiddlewares(
+					handler,
+					"proxy",
+					logger,
+					prometheus.NewPedanticRegistry(),
+				),
+			)
 			defer server.Close()
 
 			cmd := exec.Command( //nolint:gosec
@@ -65,7 +73,9 @@ func TestProxyForbidsByDefault(t *testing.T) {
 
 	handler := &http.ServeMux{}
 	proxy.RegisterHandler([]string{}, handler, testutils.NewClient(t, logger))
-	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(handler, "proxy", logger, prometheus.NewPedanticRegistry()),
+	)
 	defer server.Close()
 
 	uri, err := url.Parse(server.URL)

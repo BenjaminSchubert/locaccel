@@ -44,5 +44,5 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 		assert.NoError(t, cache.Close())
 	})
 
-	return httpclient.New(client, cache, logger, false)
+	return httpclient.New(client, cache, logger, false, func(r *http.Request, status string) {})
 }

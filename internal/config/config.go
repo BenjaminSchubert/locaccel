@@ -67,6 +67,7 @@ type Config struct {
 	Host            string
 	Cache           Cache
 	AdminInterface  string `yaml:"admin_interface"`
+	EnableMetrics   bool   `yaml:"metrics"`
 	EnableProfiling bool   `yaml:"profiling"`
 	Log             Log
 	GoProxies       []GoProxy      `yaml:"go_proxies"`
@@ -86,6 +87,7 @@ func getBaseConfig() *Config {
 			units.NewDiskQuotaInPercent(20),
 		},
 		AdminInterface: "localhost:3130",
+		EnableMetrics:  true,
 		Log:            Log{zerolog.LevelInfoValue, "json"},
 	}
 }
@@ -155,5 +157,9 @@ func applyOverrides(conf *Config) {
 
 	if val, ok := os.LookupEnv("LOCACCEL_HOST"); ok {
 		conf.Host = val
+	}
+
+	if val, ok := os.LookupEnv("LOCACCEL_ADMIN_INTERFACE"); ok {
+		conf.AdminInterface = val
 	}
 }

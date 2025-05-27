@@ -10,6 +10,7 @@ import (
 	"testing"
 	"text/template"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
@@ -97,7 +98,14 @@ func TestDownloadImageWithPodman(t *testing.T) {
 
 			handler := &http.ServeMux{}
 			oci.RegisterHandler(testcase.location, handler, testutils.NewClient(t, logger))
-			server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+			server := httptest.NewServer(
+				middleware.ApplyAllMiddlewares(
+					handler,
+					testcase.registry,
+					logger,
+					prometheus.NewPedanticRegistry(),
+				),
+			)
 			defer server.Close()
 
 			// Generate the registry configuration

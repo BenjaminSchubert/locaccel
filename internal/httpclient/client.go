@@ -24,10 +24,17 @@ type Client struct {
 	db        *database.Database[CachedResponses, *CachedResponses]
 	cache     *filecache.FileCache
 	isPrivate bool
+	notify    func(r *http.Request, status string)
 }
 
-func New(client *http.Client, cache *Cache, logger *zerolog.Logger, isPrivate bool) *Client {
-	return &Client{client, cache.db, cache.cache, isPrivate}
+func New(
+	client *http.Client,
+	cache *Cache,
+	logger *zerolog.Logger,
+	isPrivate bool,
+	notify func(r *http.Request, status string),
+) *Client {
+	return &Client{client, cache.db, cache.cache, isPrivate, notify}
 }
 
 func buildKey(req *http.Request) string {
@@ -152,6 +159,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	// We only support caching GET requests
 	if req.Method != http.MethodGet {
 		resp, _, _, err := c.forwardRequest(req, logger)
+		c.notify(req, "miss")
 		return resp, err
 	}
 
@@ -162,6 +170,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
 			logger.Debug().Msg("serving response from cache")
+			c.notify(req, "hit")
 			return resp, nil
 		}
 	} else if !errors.Is(err, database.ErrKeyNotFound) {
@@ -182,6 +191,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 				logger.Warn().
 					Err(err).
 					Msg("unable to contact upstream, serving stale response from cache")
+				c.notify(req, "hit")
 				return cRep, nil
 			}
 		}
@@ -203,9 +213,12 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		}
 		if resp != nil {
 			logger.Debug().Msg("request re-validated, serving from cache")
+			c.notify(req, "revalidated")
 			return resp, nil
 		}
 	}
+
+	c.notify(req, "miss")
 
 	if !httpcaching.IsCacheable(resp, c.isPrivate, logger) {
 		logger.Debug().Msg("request is not cacheable")

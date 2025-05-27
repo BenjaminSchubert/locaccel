@@ -28,6 +28,7 @@ cache:
   quota_low: 1
   quota_high: 10
 admin_interface: localhost:8192
+metrics: false
 profiling: true
 log:
   level: error
@@ -56,6 +57,7 @@ pypi_registries:
 				units.NewDiskQuotaInBytes(units.Bytes{Bytes: 10}),
 			},
 			AdminInterface:  "localhost:8192",
+			EnableMetrics:   false,
 			EnableProfiling: true,
 			Log:             config.Log{"error", "console"},
 			OciRegistries: []config.OciRegistry{

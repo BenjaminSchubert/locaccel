@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
@@ -28,7 +29,9 @@ func TestInstallNpmPackages(t *testing.T) {
 		handler,
 		testutils.NewClient(t, logger),
 	)
-	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, logger))
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(handler, "npm", logger, prometheus.NewPedanticRegistry()),
+	)
 	defer server.Close()
 
 	cmd := exec.Command( //nolint:gosec

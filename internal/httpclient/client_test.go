@@ -17,7 +17,9 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
-func setup(t *testing.T) (client *Client, valCache func(map[string]CachedResponses)) {
+func setup(
+	t *testing.T,
+) (client *Client, valCache func(map[string]CachedResponses), valQueries func([]string)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
@@ -29,9 +31,18 @@ func setup(t *testing.T) (client *Client, valCache func(map[string]CachedRespons
 
 	currentTime := time.Now()
 
-	return New(&http.Client{}, cache, logger, false), func(expected map[string]CachedResponses) {
-		validateCache(t, cache, expected, currentTime)
-	}
+	hits := []string{}
+
+	return New(
+			&http.Client{},
+			cache,
+			logger,
+			false,
+			func(r *http.Request, status string) { hits = append(hits, status) },
+		), func(expected map[string]CachedResponses) {
+			validateCache(t, cache, expected, currentTime)
+		},
+		func(expected []string) { assert.Equal(t, expected, hits) }
 }
 
 func makeRequest(
@@ -62,7 +73,7 @@ func makeRequest(
 func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -77,12 +88,13 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	assert.Equal(t, "hello!", body)
 
 	validateCache(map[string]CachedResponses{})
+	validateQueries([]string{"miss"})
 }
 
 func TestClientDoesNotCachedErrors(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,12 +109,13 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	require.ErrorContains(t, err, "EOF")
 
 	validateCache(map[string]CachedResponses{})
+	validateQueries([]string{})
 }
 
 func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "no-store")
@@ -116,12 +129,13 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	assert.Equal(t, "Hello!", body)
 
 	validateCache(map[string]CachedResponses{})
+	validateQueries([]string{"miss"})
 }
 
 func TestClientCachesCacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "public")
@@ -150,12 +164,13 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 			},
 		},
 	})
+	validateQueries([]string{"miss"})
 }
 
 func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	client, _ := setup(t)
+	client, _, validateQueries := setup(t)
 
 	wasCalled := false
 
@@ -201,12 +216,14 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 		},
 		resp.Header,
 	)
+
+	validateQueries([]string{"miss", "hit"})
 }
 
 func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	t.Parallel()
 
-	client, _ := setup(t)
+	client, _, validateQueries := setup(t)
 
 	wasCalled := false
 	lastModified := time.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
@@ -253,12 +270,14 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 		},
 		resp.Header,
 	)
+
+	validateQueries([]string{"miss", "hit"})
 }
 
 func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	count := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -344,6 +363,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 			},
 		},
 	})
+	validateQueries([]string{"miss", "miss", "hit", "hit"})
 }
 
 func TestValidationEtag(t *testing.T) {
@@ -368,7 +388,7 @@ func TestValidationEtag(t *testing.T) {
 				originalEtag := getEtag(originalEtagType)
 				validationEtag := getEtag(validationEtagType)
 
-				client, validateCache := setup(t)
+				client, validateCache, validateQueries := setup(t)
 
 				srv := httptest.NewServer(
 					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -455,6 +475,8 @@ func TestValidationEtag(t *testing.T) {
 						},
 					},
 				})
+
+				validateQueries([]string{"miss", "revalidated"})
 			})
 		}
 	}
@@ -462,7 +484,7 @@ func TestValidationEtag(t *testing.T) {
 
 func TestValidationLastModified(t *testing.T) {
 	t.Parallel()
-	client, validateCache := setup(t)
+	client, validateCache, validateQueries := setup(t)
 
 	lastModified := time.Now().UTC().Format(http.TimeFormat)
 
@@ -546,12 +568,14 @@ func TestValidationLastModified(t *testing.T) {
 			},
 		},
 	})
+
+	validateQueries([]string{"miss", "revalidated"})
 }
 
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Parallel()
 
-	client, _ := setup(t)
+	client, _, validateQueries := setup(t)
 
 	wasCalled := false
 
@@ -619,4 +643,6 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 		},
 		resp.Header,
 	)
+
+	validateQueries([]string{"miss", "hit", "hit"})
 }
