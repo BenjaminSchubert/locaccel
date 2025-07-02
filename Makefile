@@ -31,8 +31,11 @@ test: generate
 gopls-check:
 	@res=$$(find . -name "*.go" -not -name "*_gen.go" -not -name "*_gen_test.go" -exec gopls check {} \;); echo $${res} && [[ -z $${res} ]]
 
-generate: internal/httpclient/types_gen.go
+generate: internal/httpclient/types_gen.go internal/database/internal/dbtestutils/dbutilstestutils_gen.go
 internal/httpclient/types_gen.go: internal/httpclient/types.go
+	go generate $<
+
+internal/database/internal/dbtestutils/dbutilstestutils_gen.go: internal/database/internal/dbtestutils/dbutilstestutils.go
 	go generate $<
 
 .cache/bin/golangci-lint:
