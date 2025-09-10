@@ -16,9 +16,10 @@ type GoProxy struct {
 	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
 }
 type NpmRegistry struct {
-	Upstream string
-	Scheme   string
-	Port     uint16
+	Upstream       string
+	Scheme         string
+	Port           uint16
+	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
 }
 
 type OciRegistry struct {
@@ -123,7 +124,7 @@ func Default() *Config {
 		{"https://quay.io", 3133, nil},
 	}
 	conf.NpmRegistries = []NpmRegistry{
-		{"https://registry.npmjs.org/", "http", 3135},
+		{"https://registry.npmjs.org/", "http", 3135, nil},
 	}
 	conf.PyPIRegistries = []PyPIRegistry{
 		{"https://pypi.org/", "https://files.pythonhosted.org", 3134},

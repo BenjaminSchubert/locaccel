@@ -6,29 +6,41 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 )
 
-var ErrUnknownContentType = errors.New("unknown content type")
+var (
+	ErrUnknownContentType = errors.New("unknown content type")
+	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
+)
 
-func RegisterHandler(upstream, scheme string, handler *http.ServeMux, client *httpclient.Client) {
+func RegisterHandler(
+	upstream, scheme string,
+	handler *http.ServeMux,
+	client *httpclient.Client,
+	upstreamCaches []*url.URL,
+) {
 	// Upstream must not end with /
 	if upstream[len(upstream)-1] == '/' {
 		upstream = upstream[:len(upstream)-1]
 	}
 
+	upstreamCacheUrls := make([]string, 0, len(upstreamCaches))
+	for _, upstream := range upstreamCaches {
+		upstreamCacheUrls = append(upstreamCacheUrls, upstream.String())
+	}
+
 	handler.HandleFunc("GET /{pkg}/-/{path}", func(w http.ResponseWriter, r *http.Request) {
-		// FIXME: add support for upstream cache
-		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, nil)
+		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, upstreamCaches)
 	})
 	handler.HandleFunc(
 		"GET /{namespace}/{pkg}/-/{path}",
 		func(w http.ResponseWriter, r *http.Request) {
-			// FIXME: add support for upstream cache
-			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, nil)
+			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, upstreamCaches)
 		},
 	)
 
@@ -41,7 +53,7 @@ func RegisterHandler(upstream, scheme string, handler *http.ServeMux, client *ht
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				switch resp.Header.Get("Content-Type") {
 				case "application/vnd.npm.install-v1+json":
-					return rewriteJson(body, r, upstream, scheme)
+					return rewriteJson(body, r, upstream, scheme, upstreamCacheUrls)
 				default:
 					return nil, fmt.Errorf(
 						"%w: %s",
@@ -50,13 +62,17 @@ func RegisterHandler(upstream, scheme string, handler *http.ServeMux, client *ht
 					)
 				}
 			},
-			// FIXME: add support for upstream cache
-			nil,
+			upstreamCaches,
 		)
 	})
 }
 
-func rewriteJson(body []byte, r *http.Request, upstream, scheme string) ([]byte, error) {
+func rewriteJson(
+	body []byte,
+	r *http.Request,
+	upstream, scheme string,
+	upstreamCaches []string,
+) ([]byte, error) {
 	buf := bytes.NewBuffer(body)
 	decoder := json.NewDecoder(buf)
 	data := make(map[string]any)
@@ -64,11 +80,31 @@ func rewriteJson(body []byte, r *http.Request, upstream, scheme string) ([]byte,
 		return nil, err
 	}
 
+	remote := ""
+
 	for _, info := range data["versions"].(map[string]any) {
 		dist := info.(map[string]any)["dist"].(map[string]any)
+		if remote == "" {
+			tarball := dist["tarball"].(string)
+			if strings.HasPrefix(tarball, upstream) {
+				remote = upstream
+			} else {
+				for _, upstream := range upstreamCaches {
+					if strings.HasPrefix(tarball, upstream) {
+						remote = upstream
+						break
+					}
+				}
+			}
+
+			if remote == "" {
+				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, tarball)
+			}
+		}
+
 		dist["tarball"] = scheme + "://" + r.Host + strings.TrimPrefix(
 			dist["tarball"].(string),
-			upstream,
+			remote,
 		)
 	}
 

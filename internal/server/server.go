@@ -217,7 +217,13 @@ func setupNpmRegistry(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	npm.RegisterHandler(registry.Upstream, registry.Scheme, handler, client)
+	npm.RegisterHandler(
+		registry.Upstream,
+		registry.Scheme,
+		handler,
+		client,
+		registry.UpstreamCaches,
+	)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
