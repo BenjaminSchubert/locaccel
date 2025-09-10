@@ -1,8 +1,10 @@
 package testutils
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path"
 	"testing"
 	"time"
@@ -75,4 +77,60 @@ func NewServer(
 	)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func RunIntegrationTestsForHandler(
+	t *testing.T,
+	handlerName string,
+	registerHandler func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL),
+	test func(t *testing.T, serverURL string),
+) {
+	t.Helper()
+
+	if testing.Short() {
+		t.Skip("Integration test")
+	}
+
+	for _, useUpstreamCache := range []bool{false, true} {
+		t.Run(fmt.Sprintf("upstreamCache=%v", useUpstreamCache), func(t *testing.T) {
+			t.Parallel()
+
+			logger := TestLogger(t)
+			var upstreams []*url.URL
+			counterMiddleware := NewRequestCounterMiddleware(t)
+
+			if useUpstreamCache {
+				upstreamLogger := logger.With().Str("type", "upstream").Logger()
+				handler := &http.ServeMux{}
+				registerHandler(handler, NewClient(t, &upstreamLogger), nil)
+				server := NewServer(
+					t,
+					handler,
+					handlerName,
+					"upstream",
+					counterMiddleware,
+					&upstreamLogger,
+				)
+				upstream, err := url.Parse(server.URL)
+				require.NoError(t, err)
+				upstreams = append(upstreams, upstream)
+
+				localLogger := logger.With().Str("type", "local").Logger()
+				logger = &localLogger
+			}
+
+			handler := &http.ServeMux{}
+			registerHandler(handler, NewClient(t, logger), upstreams)
+			server := NewServer(
+				t,
+				handler,
+				handlerName,
+				"upstream",
+				counterMiddleware,
+				logger,
+			)
+
+			test(t, server.URL)
+		})
+	}
 }
