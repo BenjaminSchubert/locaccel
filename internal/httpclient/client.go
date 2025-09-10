@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -28,6 +29,8 @@ type Client struct {
 	notify    func(r *http.Request, status string)
 }
 
+type proxyCtx struct{}
+
 func New(
 	client *http.Client,
 	cache *Cache,
@@ -35,6 +38,20 @@ func New(
 	isPrivate bool,
 	notify func(r *http.Request, status string),
 ) *Client {
+	transport := client.Transport.(*http.Transport)
+	originalProxy := transport.Proxy
+
+	transport.Proxy = func(r *http.Request) (*url.URL, error) {
+		proxy := r.Context().Value(proxyCtx{})
+		if proxy == nil {
+			if originalProxy == nil {
+				return nil, nil
+			}
+			return originalProxy(r)
+		}
+
+		return proxy.(*url.URL), nil
+	}
 	return &Client{client, cache.db, cache.cache, isPrivate, notify}
 }
 
@@ -154,7 +171,15 @@ func (c *Client) serveFromCache(
 	return nil
 }
 
-func (c *Client) Do(req *http.Request, upstreamCaches []*url.URL) (*http.Response, error) {
+func (c *Client) ProxyToUpstreamCache(r *http.Request, upstreamCache *url.URL) *http.Request {
+	return r.Clone(context.WithValue(r.Context(), proxyCtx{}, upstreamCache))
+}
+
+func (c *Client) Do(
+	req *http.Request,
+	upstreamCaches []*url.URL,
+	buildUpstreamRequest func(r *http.Request, upstreamCache *url.URL) *http.Request,
+) (*http.Response, error) {
 	logger := hlog.FromRequest(req)
 
 	// We only support caching GET requests
@@ -188,6 +213,7 @@ func (c *Client) Do(req *http.Request, upstreamCaches []*url.URL) (*http.Respons
 	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequestWithUpstream(
 		req,
 		upstreamCaches,
+		buildUpstreamRequest,
 		logger,
 	)
 	if err != nil || resp.StatusCode >= 500 {
@@ -280,17 +306,25 @@ func (c *Client) addConditionalRequestInformation(
 func (c *Client) forwardRequestWithUpstream(
 	req *http.Request,
 	upstreamCaches []*url.URL,
+	buildUpstreamRequest func(r *http.Request, upstreamCache *url.URL) *http.Request,
 	logger *zerolog.Logger,
 ) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
+	if buildUpstreamRequest == nil {
+		buildUpstreamRequest = func(r *http.Request, upstreamCache *url.URL) *http.Request {
+			rr := req.Clone(req.Context())
+			rr.Host = upstreamCache.Host
+			rr.URL.Scheme = upstreamCache.Scheme
+			rr.URL.Host = upstreamCache.Host
+			return rr
+		}
+	}
+
 	for _, upstream := range upstreamCaches {
 		logger.Debug().Stringer("upstream", upstream).Msg("Trying upstream first")
-
-		rr := req.Clone(req.Context())
-		rr.Host = upstream.Host
-		rr.URL.Scheme = upstream.Scheme
-		rr.URL.Host = upstream.Host
-
-		resp, timeAtRequestCreated, timeAtResponseReceived, err = c.forwardRequest(rr, logger)
+		resp, timeAtRequestCreated, timeAtResponseReceived, err = c.forwardRequest(
+			buildUpstreamRequest(req, upstream),
+			logger,
+		)
 		if err != nil {
 			logger.Debug().Stringer("upstream", upstream).Msg("Upstream returned an error")
 		} else {

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -13,6 +14,7 @@ func RegisterHandler(
 	allowedHostnames []string,
 	handler *http.ServeMux,
 	client *httpclient.Client,
+	upstreamCaches []*url.URL,
 ) {
 	hostnames := make(map[string]struct{}, len(allowedHostnames))
 	for _, hostname := range allowedHostnames {
@@ -32,7 +34,14 @@ func RegisterHandler(
 			return
 		}
 
-		// FIXME: add support for upstream cache
-		handlers.Forward(w, r, r.URL.String(), client, nil, nil)
+		handlers.ForwardWithCustomUpstreamCacheBuilder(
+			w,
+			r,
+			r.URL.String(),
+			client,
+			nil,
+			upstreamCaches,
+			client.ProxyToUpstreamCache,
+		)
 	})
 }

@@ -239,7 +239,7 @@ func setupProxy(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	proxy.RegisterHandler(proxyConf.AllowedUpstreams, handler, client)
+	proxy.RegisterHandler(proxyConf.AllowedUpstreams, handler, client, proxyConf.UpstreamCaches)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port),

@@ -36,6 +36,7 @@ type PyPIRegistry struct {
 type Proxy struct {
 	AllowedUpstreams []string `yaml:"allowed_upstreams"`
 	Port             uint16
+	UpstreamCaches   []*url.URL `yaml:"upstream_caches"`
 }
 
 type Log struct {
@@ -135,6 +136,7 @@ func Default() *Config {
 			"archive.ubuntu.com", "security.ubuntu.com",
 		},
 		3142,
+		nil,
 	}}
 
 	applyOverrides(conf)
