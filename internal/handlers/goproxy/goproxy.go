@@ -2,12 +2,18 @@ package goproxy
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 )
 
-func RegisterHandler(upstream string, handler *http.ServeMux, client *httpclient.Client) {
+func RegisterHandler(
+	upstream string,
+	handler *http.ServeMux,
+	client *httpclient.Client,
+	upstreamCaches []*url.URL,
+) {
 	handler.HandleFunc("GET /sumdb/", func(w http.ResponseWriter, r *http.Request) {
 		handlers.Forward(
 			w,
@@ -17,6 +23,7 @@ func RegisterHandler(upstream string, handler *http.ServeMux, client *httpclient
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				return body, nil
 			},
+			upstreamCaches,
 		)
 	})
 
@@ -29,6 +36,7 @@ func RegisterHandler(upstream string, handler *http.ServeMux, client *httpclient
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				return body, nil
 			},
+			upstreamCaches,
 		)
 	})
 }

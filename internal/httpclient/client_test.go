@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strconv"
 	"testing"
@@ -48,19 +49,20 @@ func setup(
 func makeRequest(
 	t *testing.T,
 	client *Client,
-	method, url string,
+	method, uri string,
 	headers http.Header,
+	upstreamCaches []*url.URL,
 ) (resp *http.Response, body string) {
 	t.Helper()
 
-	req, err := http.NewRequest(method, url, nil)
+	req, err := http.NewRequest(method, uri, nil)
 	require.NoError(t, err)
 	logger := testutils.TestLogger(t)
 	req = req.WithContext(logger.WithContext(req.Context()))
 
 	req.Header = headers
 
-	resp, err = client.Do(req)
+	resp, err = client.Do(req, upstreamCaches)
 	require.NoError(t, err)
 
 	bodyB, err := io.ReadAll(resp.Body)
@@ -83,7 +85,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodPost, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodPost, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "hello!", body)
 
@@ -105,7 +107,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 	require.NoError(t, err)
 
-	_, err = client.Do(req) //nolint:bodyclose
+	_, err = client.Do(req, nil) //nolint:bodyclose
 	require.ErrorContains(t, err, "EOF")
 
 	validateCache(map[string]CachedResponses{})
@@ -124,7 +126,7 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
@@ -144,7 +146,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
@@ -184,7 +186,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
 	date := resp.Header["Date"]
 
@@ -202,7 +204,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	)
 
 	// Second Query
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -238,7 +240,7 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
 	date := resp.Header["Date"]
 
@@ -256,7 +258,7 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	)
 
 	// Second Query
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -296,6 +298,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 			http.MethodGet,
 			srv.URL,
 			http.Header{"Count": []string{strconv.Itoa(count)}},
+			nil,
 		)
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fmt.Sprintf("Hello %d!", count), body)
@@ -418,6 +421,7 @@ func TestValidationEtag(t *testing.T) {
 					http.MethodGet,
 					srv.URL,
 					http.Header{},
+					nil,
 				)
 				assert.Equal(t, 200, resp1.StatusCode)
 				assert.Equal(t, "Hello!", body)
@@ -440,6 +444,7 @@ func TestValidationEtag(t *testing.T) {
 					http.MethodGet,
 					srv.URL,
 					http.Header{},
+					nil,
 				)
 				assert.Equal(t, 200, resp2.StatusCode)
 				assert.Equal(t, "Hello!", body)
@@ -514,6 +519,7 @@ func TestValidationLastModified(t *testing.T) {
 		http.MethodGet,
 		srv.URL,
 		http.Header{},
+		nil,
 	)
 	assert.Equal(t, 200, resp1.StatusCode)
 	assert.Equal(t, "Hello!", body)
@@ -535,6 +541,7 @@ func TestValidationLastModified(t *testing.T) {
 		http.MethodGet,
 		srv.URL,
 		http.Header{},
+		nil,
 	)
 	assert.Equal(t, 200, resp2.StatusCode)
 	assert.Equal(t, "Hello!", body)
@@ -593,7 +600,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
 	date := resp.Header["Date"]
 
@@ -611,7 +618,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	)
 
 	// Second query getting a 5XX, should be served by the cache
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -629,7 +636,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	// Third Query, should still be served by the cache
 	srv.Close()
 
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil) //nolint:bodyclose
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -645,4 +652,94 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	)
 
 	validateQueries([]string{"miss", "hit", "hit"})
+}
+
+func TestClientTriesUpstreamCachesFirst(t *testing.T) {
+	t.Parallel()
+
+	client, validateCache, validateQueries := setup(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "public")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	upstreamCache, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	resp, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		"https://invalid.test",
+		nil,
+		[]*url.URL{upstreamCache},
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+
+	validateCache(map[string]CachedResponses{
+		"GET+https://invalid.test": {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp.Header["Date"],
+				},
+				http.Header{},
+				time.Time{},
+			},
+		},
+	})
+	validateQueries([]string{"miss"})
+}
+
+func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
+	t.Parallel()
+
+	client, validateCache, validateQueries := setup(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "public")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	upstreamCache, err := url.Parse("https://invalid.test")
+	require.NoError(t, err)
+
+	resp, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		nil,
+		[]*url.URL{upstreamCache},
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp.Header["Date"],
+				},
+				http.Header{},
+				time.Time{},
+			},
+		},
+	})
+	validateQueries([]string{"miss"})
 }

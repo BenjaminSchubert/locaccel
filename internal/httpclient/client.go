@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -153,7 +154,7 @@ func (c *Client) serveFromCache(
 	return nil
 }
 
-func (c *Client) Do(req *http.Request) (*http.Response, error) {
+func (c *Client) Do(req *http.Request, upstreamCaches []*url.URL) (*http.Response, error) {
 	logger := hlog.FromRequest(req)
 
 	// We only support caching GET requests
@@ -184,7 +185,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 	logger.Debug().Msg("unable to serve from cache")
 
-	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequest(req, logger)
+	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequestWithUpstream(
+		req,
+		upstreamCaches,
+		logger,
+	)
 	if err != nil || resp.StatusCode >= 500 {
 		if dbEntry != nil {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
@@ -270,6 +275,30 @@ func (c *Client) addConditionalRequestInformation(
 	}
 
 	return len(etags) != 0 || len(lastModified) != 0
+}
+
+func (c *Client) forwardRequestWithUpstream(
+	req *http.Request,
+	upstreamCaches []*url.URL,
+	logger *zerolog.Logger,
+) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
+	for _, upstream := range upstreamCaches {
+		logger.Debug().Stringer("upstream", upstream).Msg("Trying upstream first")
+
+		rr := req.Clone(req.Context())
+		rr.Host = upstream.Host
+		rr.URL.Scheme = upstream.Scheme
+		rr.URL.Host = upstream.Host
+
+		resp, timeAtRequestCreated, timeAtResponseReceived, err = c.forwardRequest(rr, logger)
+		if err != nil {
+			logger.Debug().Stringer("upstream", upstream).Msg("Upstream returned an error")
+		} else {
+			return
+		}
+	}
+
+	return c.forwardRequest(req, logger)
 }
 
 func (c *Client) forwardRequest(

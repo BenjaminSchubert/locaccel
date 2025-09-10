@@ -1,6 +1,7 @@
 package oci_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -91,31 +92,67 @@ func TestDownloadImageWithPodman(t *testing.T) {
 		{"gcr.io", "https://gcr.io", "gcr.io/distroless/static"},
 		{"quay.io", "https://quay.io", "quay.io/navidys/prometheus-podman-exporter"},
 	} {
-		t.Run(testcase.registry, func(t *testing.T) {
-			t.Parallel()
+		for _, useUpstreamCache := range []bool{false, true} {
+			t.Run(
+				fmt.Sprintf("registry=%s,upstreamCache=%v", testcase.registry, useUpstreamCache),
+				func(t *testing.T) {
+					t.Parallel()
 
-			logger := testutils.TestLogger(t)
+					logger := testutils.TestLogger(t)
+					var upstreams []*url.URL
+					counterMiddleware := testutils.NewRequestCounterMiddleware(t)
 
-			handler := &http.ServeMux{}
-			oci.RegisterHandler(testcase.location, handler, testutils.NewClient(t, logger))
-			server := httptest.NewServer(
-				middleware.ApplyAllMiddlewares(
-					handler,
-					testcase.registry,
-					logger,
-					prometheus.NewPedanticRegistry(),
-				),
+					if useUpstreamCache {
+						upstreamLogger := logger.With().Str("type", "upstream").Logger()
+						handler := &http.ServeMux{}
+						oci.RegisterHandler(
+							testcase.location,
+							handler,
+							testutils.NewClient(t, &upstreamLogger),
+							nil,
+						)
+						server := testutils.NewServer(
+							t,
+							handler,
+							"go",
+							"upstream",
+							counterMiddleware,
+							&upstreamLogger,
+						)
+						upstream, err := url.Parse(server.URL)
+						require.NoError(t, err)
+						upstreams = append(upstreams, upstream)
+					}
+
+					localLogger := logger.With().Str("type", "local").Logger()
+
+					handler := &http.ServeMux{}
+					oci.RegisterHandler(
+						testcase.location,
+						handler,
+						testutils.NewClient(t, &localLogger),
+						upstreams,
+					)
+					server := httptest.NewServer(
+						middleware.ApplyAllMiddlewares(
+							handler,
+							testcase.registry,
+							&localLogger,
+							prometheus.NewPedanticRegistry(),
+						),
+					)
+					defer server.Close()
+
+					// Generate the registry configuration
+					env := preparePodmanIsolation(
+						t, path.Join(t.TempDir(), "podman"), server.URL, testcase.registry)
+
+					cmd := exec.Command("podman", "pull", testcase.image) //nolint:gosec
+					cmd.Env = append(cmd.Env, env...)
+					output, err := cmd.CombinedOutput()
+					require.NoErrorf(t, err, "Running podman failed:\n%s", output)
+				},
 			)
-			defer server.Close()
-
-			// Generate the registry configuration
-			env := preparePodmanIsolation(
-				t, path.Join(t.TempDir(), "podman"), server.URL, testcase.registry)
-
-			cmd := exec.Command("podman", "pull", testcase.image) //nolint:gosec
-			cmd.Env = append(cmd.Env, env...)
-			output, err := cmd.CombinedOutput()
-			require.NoErrorf(t, err, "Running podman failed:\n%s", output)
-		})
+		}
 	}
 }

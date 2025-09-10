@@ -53,13 +53,16 @@ func RegisterHandler(
 					)
 				}
 			},
+			// FIXME: add support for upstream cache
+			nil,
 		)
 	})
 
 	handler.HandleFunc(
 		"GET /cdn/"+encodedCDN+"/{path...}",
 		func(w http.ResponseWriter, r *http.Request) {
-			handlers.Forward(w, r, expectedCDN+r.PathValue("path"), client, nil)
+			// FIXME: add support for upstream cache
+			handlers.Forward(w, r, expectedCDN+r.PathValue("path"), client, nil, nil)
 		},
 	)
 }

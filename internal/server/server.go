@@ -151,7 +151,7 @@ func setupGoProxy(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	goproxy.RegisterHandler(goProxy.Upstream, handler, client)
+	goproxy.RegisterHandler(goProxy.Upstream, handler, client, goProxy.UpstreamCaches)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, goProxy.Port),
@@ -173,7 +173,7 @@ func setupOciRegistry(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	oci.RegisterHandler(registry.Upstream, handler, client)
+	oci.RegisterHandler(registry.Upstream, handler, client, registry.UpstreamCaches)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, registry.Port),

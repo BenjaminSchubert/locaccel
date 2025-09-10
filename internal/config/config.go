@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -10,8 +11,9 @@ import (
 )
 
 type GoProxy struct {
-	Upstream string
-	Port     uint16
+	Upstream       string
+	Port           uint16
+	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
 }
 type NpmRegistry struct {
 	Upstream string
@@ -20,8 +22,9 @@ type NpmRegistry struct {
 }
 
 type OciRegistry struct {
-	Upstream string
-	Port     uint16
+	Upstream       string
+	Port           uint16
+	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
 }
 
 type PyPIRegistry struct {
@@ -111,12 +114,12 @@ func Parse(configPath string) (*Config, error) {
 func Default() *Config {
 	conf := getBaseConfig()
 	conf.GoProxies = []GoProxy{
-		{"https://proxy.golang.org", 3136},
+		{"https://proxy.golang.org", 3136, nil},
 	}
 	conf.OciRegistries = []OciRegistry{
-		{"https://registry-1.docker.io", 3131},
-		{"https://gcr.io", 3132},
-		{"https://quay.io", 3133},
+		{"https://registry-1.docker.io", 3131, nil},
+		{"https://gcr.io", 3132, nil},
+		{"https://quay.io", 3133, nil},
 	}
 	conf.NpmRegistries = []NpmRegistry{
 		{"https://registry.npmjs.org/", "http", 3135},

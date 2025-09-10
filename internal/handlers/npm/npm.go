@@ -21,12 +21,14 @@ func RegisterHandler(upstream, scheme string, handler *http.ServeMux, client *ht
 	}
 
 	handler.HandleFunc("GET /{pkg}/-/{path}", func(w http.ResponseWriter, r *http.Request) {
-		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil)
+		// FIXME: add support for upstream cache
+		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, nil)
 	})
 	handler.HandleFunc(
 		"GET /{namespace}/{pkg}/-/{path}",
 		func(w http.ResponseWriter, r *http.Request) {
-			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil)
+			// FIXME: add support for upstream cache
+			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, nil)
 		},
 	)
 
@@ -48,6 +50,8 @@ func RegisterHandler(upstream, scheme string, handler *http.ServeMux, client *ht
 					)
 				}
 			},
+			// FIXME: add support for upstream cache
+			nil,
 		)
 	})
 }

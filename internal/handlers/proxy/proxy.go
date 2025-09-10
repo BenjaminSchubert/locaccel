@@ -32,6 +32,7 @@ func RegisterHandler(
 			return
 		}
 
-		handlers.Forward(w, r, r.URL.String(), client, nil)
+		// FIXME: add support for upstream cache
+		handlers.Forward(w, r, r.URL.String(), client, nil, nil)
 	})
 }
