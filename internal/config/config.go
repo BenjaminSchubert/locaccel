@@ -29,9 +29,10 @@ type OciRegistry struct {
 }
 
 type PyPIRegistry struct {
-	Upstream string
-	CDN      string
-	Port     uint16
+	Upstream       string
+	CDN            string
+	Port           uint16
+	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
 }
 
 type Proxy struct {
@@ -127,7 +128,7 @@ func Default() *Config {
 		{"https://registry.npmjs.org/", "http", 3135, nil},
 	}
 	conf.PyPIRegistries = []PyPIRegistry{
-		{"https://pypi.org/", "https://files.pythonhosted.org", 3134},
+		{"https://pypi.org/", "https://files.pythonhosted.org", 3134, nil},
 	}
 	conf.Proxies = []Proxy{{
 		[]string{

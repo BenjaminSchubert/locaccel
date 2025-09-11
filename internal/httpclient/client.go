@@ -315,6 +315,7 @@ func (c *Client) forwardRequestWithUpstream(
 			rr.Host = upstreamCache.Host
 			rr.URL.Scheme = upstreamCache.Scheme
 			rr.URL.Host = upstreamCache.Host
+			rr.URL.Path = upstreamCache.Path + rr.URL.Path
 			return rr
 		}
 	}

@@ -195,7 +195,7 @@ func setupPypiRegistry(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client)
+	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client, registry.UpstreamCaches)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, registry.Port),

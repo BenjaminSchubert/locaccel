@@ -23,6 +23,7 @@ func RegisterHandler(
 	upstream, expectedCDN string,
 	handler *http.ServeMux,
 	client *httpclient.Client,
+	upstreamCaches []*url.URL,
 ) {
 	// Upstream must not end with /
 	if upstream[len(upstream)-1] == '/' {
@@ -32,7 +33,15 @@ func RegisterHandler(
 	if expectedCDN[len(expectedCDN)-1] != '/' {
 		expectedCDN += "/"
 	}
-	encodedCDN := base64.StdEncoding.EncodeToString([]byte(expectedCDN))
+	encodedCDN := "/cdn/" + base64.StdEncoding.EncodeToString([]byte(expectedCDN))
+
+	upstreamCachesWithCDN := make([]*url.URL, 0, len(upstreamCaches))
+	for _, upstream := range upstreamCaches {
+		up := new(url.URL)
+		*up = *upstream
+		up.Path += encodedCDN
+		upstreamCachesWithCDN = append(upstreamCachesWithCDN, up)
+	}
 
 	// Index files
 	handler.HandleFunc("GET /simple/", func(w http.ResponseWriter, r *http.Request) {
@@ -53,16 +62,21 @@ func RegisterHandler(
 					)
 				}
 			},
-			// FIXME: add support for upstream cache
-			nil,
+			upstreamCaches,
 		)
 	})
 
 	handler.HandleFunc(
-		"GET /cdn/"+encodedCDN+"/{path...}",
+		"GET "+encodedCDN+"/{path...}",
 		func(w http.ResponseWriter, r *http.Request) {
-			// FIXME: add support for upstream cache
-			handlers.Forward(w, r, expectedCDN+r.PathValue("path"), client, nil, nil)
+			handlers.Forward(
+				w,
+				r,
+				expectedCDN+r.PathValue("path"),
+				client,
+				nil,
+				upstreamCachesWithCDN,
+			)
 		},
 	)
 }
@@ -75,10 +89,25 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		return nil, err
 	}
 
+	expectedPrefix := ""
+
 	for _, fileInfo := range data["files"].([]any) {
 		file := fileInfo.(map[string]any)
 		originalUrl := file["url"].(string)
-		if !strings.HasPrefix(originalUrl, expectedCDN) {
+
+		if expectedPrefix == "" {
+			switch {
+			case strings.HasPrefix(originalUrl, expectedCDN):
+				expectedPrefix = expectedCDN
+			case strings.HasPrefix(originalUrl, encodedCDN):
+				expectedPrefix = encodedCDN
+				encodedCDN = ""
+			default:
+				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
+			}
+		}
+
+		if !strings.HasPrefix(originalUrl, expectedPrefix) {
 			return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
 		}
 
@@ -90,7 +119,7 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		// Rewrite the url to point to here
 		uri.Host = ""
 		uri.Scheme = ""
-		uri.Path = "/cdn/" + encodedCDN + uri.Path
+		uri.Path = encodedCDN + uri.Path
 
 		file["url"] = uri.String()
 	}
