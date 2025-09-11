@@ -6,7 +6,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/rs/zerolog/hlog"
@@ -20,19 +19,7 @@ func Forward(
 	upstreamURL string,
 	client *httpclient.Client,
 	modify func(body []byte, resp *http.Response) ([]byte, error),
-	upstreamCaches []*url.URL,
-) {
-	ForwardWithCustomUpstreamCacheBuilder(w, r, upstreamURL, client, modify, upstreamCaches, nil)
-}
-
-func ForwardWithCustomUpstreamCacheBuilder(
-	w http.ResponseWriter,
-	r *http.Request,
-	upstreamURL string,
-	client *httpclient.Client,
-	modify func(body []byte, resp *http.Response) ([]byte, error),
-	upstreamCaches []*url.URL,
-	buildUpstreamRequest func(r *http.Request, upstreamCache *url.URL) *http.Request,
+	upstreamCache httpclient.UpstreamCache,
 ) {
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
@@ -40,7 +27,7 @@ func ForwardWithCustomUpstreamCacheBuilder(
 	}
 	maps.Copy(upstreamReq.Header, r.Header)
 
-	resp, err := client.Do(upstreamReq, upstreamCaches, buildUpstreamRequest) //nolint:bodyclose
+	resp, err := client.Do(upstreamReq, upstreamCache) //nolint:bodyclose
 	if err != nil {
 		hlog.FromRequest(r).
 			Panic().

@@ -43,6 +43,9 @@ func RegisterHandler(
 		upstreamCachesWithCDN = append(upstreamCachesWithCDN, up)
 	}
 
+	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
+	cachesWithCDN := httpclient.UpstreamCache{Uris: upstreamCachesWithCDN, Proxy: false}
+
 	// Index files
 	handler.HandleFunc("GET /simple/", func(w http.ResponseWriter, r *http.Request) {
 		handlers.Forward(
@@ -62,7 +65,7 @@ func RegisterHandler(
 					)
 				}
 			},
-			upstreamCaches,
+			caches,
 		)
 	})
 
@@ -75,7 +78,7 @@ func RegisterHandler(
 				expectedCDN+r.PathValue("path"),
 				client,
 				nil,
-				upstreamCachesWithCDN,
+				cachesWithCDN,
 			)
 		},
 	)

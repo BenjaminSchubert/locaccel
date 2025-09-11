@@ -21,6 +21,8 @@ func RegisterHandler(
 		hostnames[hostname] = struct{}{}
 	}
 
+	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: true}
+
 	handler.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := hostnames[r.Host]; !ok {
 			w.WriteHeader(http.StatusForbidden)
@@ -34,14 +36,13 @@ func RegisterHandler(
 			return
 		}
 
-		handlers.ForwardWithCustomUpstreamCacheBuilder(
+		handlers.Forward(
 			w,
 			r,
 			r.URL.String(),
 			client,
 			nil,
-			upstreamCaches,
-			client.ProxyToUpstreamCache,
+			caches,
 		)
 	})
 }

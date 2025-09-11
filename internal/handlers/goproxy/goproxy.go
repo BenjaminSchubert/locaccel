@@ -14,6 +14,7 @@ func RegisterHandler(
 	client *httpclient.Client,
 	upstreamCaches []*url.URL,
 ) {
+	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
 	handler.HandleFunc("GET /sumdb/", func(w http.ResponseWriter, r *http.Request) {
 		handlers.Forward(
 			w,
@@ -23,7 +24,7 @@ func RegisterHandler(
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				return body, nil
 			},
-			upstreamCaches,
+			caches,
 		)
 	})
 
@@ -36,7 +37,7 @@ func RegisterHandler(
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				return body, nil
 			},
-			upstreamCaches,
+			caches,
 		)
 	})
 }

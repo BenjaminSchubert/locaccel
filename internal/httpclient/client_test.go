@@ -62,7 +62,7 @@ func makeRequest(
 
 	req.Header = headers
 
-	resp, err = client.Do(req, upstreamCaches, nil)
+	resp, err = client.Do(req, UpstreamCache{upstreamCaches, false})
 	require.NoError(t, err)
 
 	bodyB, err := io.ReadAll(resp.Body)
@@ -107,7 +107,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 	require.NoError(t, err)
 
-	_, err = client.Do(req, nil, nil) //nolint:bodyclose
+	_, err = client.Do(req, UpstreamCache{}) //nolint:bodyclose
 	require.ErrorContains(t, err, "EOF")
 
 	validateCache(map[string]CachedResponses{})

@@ -33,14 +33,15 @@ func RegisterHandler(
 	for _, upstream := range upstreamCaches {
 		upstreamCacheUrls = append(upstreamCacheUrls, upstream.String())
 	}
+	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
 
 	handler.HandleFunc("GET /{pkg}/-/{path}", func(w http.ResponseWriter, r *http.Request) {
-		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, upstreamCaches)
+		handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, caches)
 	})
 	handler.HandleFunc(
 		"GET /{namespace}/{pkg}/-/{path}",
 		func(w http.ResponseWriter, r *http.Request) {
-			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, upstreamCaches)
+			handlers.Forward(w, r, upstream+r.URL.RequestURI(), client, nil, caches)
 		},
 	)
 
@@ -62,7 +63,7 @@ func RegisterHandler(
 					)
 				}
 			},
-			upstreamCaches,
+			caches,
 		)
 	})
 }

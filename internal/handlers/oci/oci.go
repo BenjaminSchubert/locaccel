@@ -14,7 +14,9 @@ func RegisterHandler(
 	client *httpclient.Client,
 	upstreamCaches []*url.URL,
 ) {
+	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
+
 	handler.HandleFunc("GET /v2/", func(w http.ResponseWriter, r *http.Request) {
-		handlers.Forward(w, r, registry+r.URL.RequestURI(), client, nil, upstreamCaches)
+		handlers.Forward(w, r, registry+r.URL.RequestURI(), client, nil, caches)
 	})
 }
