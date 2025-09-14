@@ -288,12 +288,12 @@ func (c *Client) addConditionalRequestInformation(
 	}
 
 	if len(lastModified) != 0 {
-		originalLastModified := req.Header["If-Unmodified-Since"]
+		originalLastModified := req.Header["If-Modified-Since"]
 		if originalLastModified != nil {
 			lastModified = append(lastModified, originalLastModified...)
 		}
 
-		req.Header["If-Unmodified-Since"] = []string{strings.Join(lastModified, ", ")}
+		req.Header["If-Modified-Since"] = []string{strings.Join(lastModified, ", ")}
 	}
 
 	return len(etags) != 0 || len(lastModified) != 0
