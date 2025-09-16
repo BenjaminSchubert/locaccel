@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpheaders"
+	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
 
 func TestEtagHeadersMatch(t *testing.T) {

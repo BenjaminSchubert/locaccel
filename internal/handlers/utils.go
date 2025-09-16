@@ -11,6 +11,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
+	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
 
 func Forward(
@@ -45,6 +46,13 @@ func Forward(
 		}
 	}()
 
+	maps.Copy(w.Header(), resp.Header)
+
+	if resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	if modify != nil {
 		if err := modifyBody(resp, modify); err != nil {
 			hlog.FromRequest(r).
@@ -54,7 +62,6 @@ func Forward(
 		}
 	}
 
-	maps.Copy(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
@@ -107,4 +114,18 @@ func modifyBody(
 
 	resp.Body = io.NopCloser(buffer)
 	return nil
+}
+
+func matchesOriginalQuery(headers http.Header, resp *http.Response) bool {
+	etag := resp.Header.Get("Etag")
+	if etag != "" {
+		for _, match := range headers["If-None-Match"] {
+			if httpheaders.EtagsMatch(etag, match) {
+				return true
+			}
+		}
+	}
+
+	lastModified := resp.Header.Get("Last-Modified")
+	return lastModified != "" && lastModified == headers.Get("If-Modified-Since")
 }

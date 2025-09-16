@@ -16,7 +16,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/filecache"
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
-	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpheaders"
+	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
 
 var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
@@ -235,7 +235,6 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 			logger,
 		)
 		if err != nil && !errors.Is(err, errNoMatchingEntryInCache) {
-			// FIXME: check if original request was conditional and return if so
 			panic(err)
 		}
 		if resp != nil {
