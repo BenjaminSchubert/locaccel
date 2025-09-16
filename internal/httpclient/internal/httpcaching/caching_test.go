@@ -33,6 +33,7 @@ func TestResponseIsCacheable(t *testing.T) {
 			{"expires", http.StatusOK, http.Header{"Expires": []string{"123"}}, true},
 			{"last-modified", http.StatusOK, http.Header{"Last-Modified": []string{"Fri, 15 Dec 2023 11:01:18 GMT"}}, true},
 			{"last-modified-invalid", http.StatusOK, http.Header{"Last-Modified": []string{"Wrong date"}}, false},
+			{"etag", http.StatusOK, http.Header{"Etag": []string{"one"}}, true},
 			{"no-information", http.StatusOK, nil, false},
 		} {
 			t.Run(fmt.Sprintf("%s [%t]", tc.description, private), func(t *testing.T) {
