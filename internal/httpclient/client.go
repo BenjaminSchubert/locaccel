@@ -288,12 +288,26 @@ func (c *Client) addConditionalRequestInformation(
 	}
 
 	if len(lastModified) != 0 {
-		originalLastModified := req.Header["If-Modified-Since"]
-		if originalLastModified != nil {
-			lastModified = append(lastModified, originalLastModified...)
+		if req.Header["If-Modified-Since"] == nil {
+			if len(lastModified) == 1 {
+				req.Header["If-Modified-Since"] = []string{lastModified[0]}
+			} else {
+				maxLastModifiedTime := time.Time{}
+				maxLastModified := ""
+				for _, date := range lastModified {
+					t, err := http.ParseTime(date)
+					if err == nil {
+						if maxLastModifiedTime.Before(t) {
+							maxLastModifiedTime = t
+							maxLastModified = date
+						}
+					}
+				}
+				if maxLastModifiedTime.Equal(time.Time{}) {
+					req.Header["If-Modified-Since"] = []string{maxLastModified}
+				}
+			}
 		}
-
-		req.Header["If-Modified-Since"] = []string{strings.Join(lastModified, ", ")}
 	}
 
 	return len(etags) != 0 || len(lastModified) != 0
@@ -343,6 +357,14 @@ func (c *Client) forwardRequest(
 ) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
 	removeHopByHopHeaders(req.Header)
 
+	headers := req.Header.Clone()
+	headers.Del("Authorization")
+
+	logger.Trace().
+		Any("headers", headers).
+		Str("method", req.Method).
+		Msg("Sending request to upstream")
+
 	timeAtRequestCreated = time.Now().UTC()
 	resp, err = c.client.Do(req)
 	timeAtResponseReceived = time.Now().UTC()
@@ -352,6 +374,10 @@ func (c *Client) forwardRequest(
 	}
 
 	removeHopByHopHeaders(resp.Header)
+	logger.Trace().
+		Any("headers", resp.Header).
+		Int("status", resp.StatusCode).
+		Msg("Received response from upstream")
 
 	// Ensure the Date header is valid,
 	// as per https://datatracker.ietf.org/doc/html/rfc9110#name-date
