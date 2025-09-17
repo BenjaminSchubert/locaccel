@@ -12,7 +12,7 @@ start: .cache/bin/air
 all: build lint gopls-check test
 
 build: generate
-	go build -trimpath -o build/locaccel ./cmd/locaccel
+	CGO_ENABLED=0 go build -ldflags '-s -w' -trimpath -o build/locaccel ./cmd/locaccel
 
 lint: .cache/bin/golangci-lint generate
 	go mod tidy -diff
