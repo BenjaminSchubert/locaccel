@@ -126,7 +126,7 @@ func (c *Client) serveFromCachedCandidates(
 			logger.Warn().Err(err).Msg("unable to parse cache control directives")
 		}
 
-		if cacheControl.NoCache || cacheControl.MustRevalidate {
+		if !forceStale && (cacheControl.NoCache || cacheControl.MustRevalidate) {
 			continue
 		}
 

@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -23,9 +24,26 @@ import (
 var (
 	TestLogger                  = tst.TestLogger
 	NewRequestCounterMiddleware = tst.NewRequestCounterMiddleware
+	ErrUnableToContactUpstream  = errors.New("unable to contact server")
 )
 
+type OfflineTransport struct{}
+
+func (o *OfflineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return nil, ErrUnableToContactUpstream
+}
+
 func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
+	t.Helper()
+
+	client, _ := NewClientWithUnderlyingClient(t, logger)
+	return client
+}
+
+func NewClientWithUnderlyingClient(
+	t *testing.T,
+	logger *zerolog.Logger,
+) (cachingClient *httpclient.Client, httpClient *http.Client) {
 	t.Helper()
 
 	client := &http.Client{
@@ -43,8 +61,8 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 
 	cache, err := httpclient.NewCache(
 		path.Join(t.TempDir(), "cache"),
-		units.Bytes{Bytes: 1024 * 1024},
 		units.Bytes{Bytes: 10 * 1024 * 1024},
+		units.Bytes{Bytes: 100 * 1024 * 1024},
 		logger,
 	)
 	require.NoError(t, err)
@@ -52,7 +70,13 @@ func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
 		assert.NoError(t, cache.Close())
 	})
 
-	return httpclient.New(client, cache, logger, false, func(r *http.Request, status string) {})
+	return httpclient.New(
+		client,
+		cache,
+		logger,
+		false,
+		func(r *http.Request, status string) {},
+	), client
 }
 
 func NewServer(
@@ -133,4 +157,31 @@ func RunIntegrationTestsForHandler(
 			test(t, server.URL)
 		})
 	}
+
+	t.Run("UpstreamDown", func(t *testing.T) {
+		t.Parallel()
+
+		logger := TestLogger(t)
+		handler := &http.ServeMux{}
+		counterMiddleware := NewRequestCounterMiddleware(t)
+		cachingClient, httpClient := NewClientWithUnderlyingClient(t, logger)
+
+		registerHandler(handler, cachingClient, nil)
+		server := NewServer(
+			t,
+			handler,
+			handlerName,
+			"upstream",
+			counterMiddleware,
+			logger,
+		)
+
+		// Run the test, populating the cache
+		test(t, server.URL)
+
+		httpClient.Transport = &OfflineTransport{}
+
+		// Run the test again, with the cache disconnected
+		test(t, server.URL)
+	})
 }
