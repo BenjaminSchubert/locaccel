@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,6 +16,14 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/middleware"
 	"github.com/benjaminschubert/locaccel/internal/server"
 )
+
+func getVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "<unknown>"
+	}
+	return info.Main.Version
+}
 
 func main() {
 	panicLogger, err := logging.CreateLogger(zerolog.WarnLevel, "json")
@@ -44,6 +53,7 @@ func main() {
 		panicLogger.Fatal().Err(err).Msg("Unable to initialize logger")
 	}
 
+	logger.Info().Str("version", getVersion()).Msg("Running locaccel")
 	if !configPathSet {
 		logger.Info().
 			Msg("locaccel.yaml not found and LOCACCEL_CONFIG_PATH not set: Using default configuration")
