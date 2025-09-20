@@ -90,9 +90,11 @@ jobs:
       - name: Enable podman socket
         run: systemctl --user start podman.socket
 
-      - name: Compute the image namespace
+      - name: Compute the image namespace and registry
         id: namespace
-        run: echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        run: >-
+          echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "registry=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Extract docker metadata
         id: meta
@@ -134,7 +136,7 @@ jobs:
         with:
           username: ${{ github.actor }}
           password: ${{ github.token }}
-          registry: ghcr.io/${{ github.repository_owner }}
+          registry: ${{ steps.namespace.outputs.registry }}
 
       - name: Push images
         id: push
