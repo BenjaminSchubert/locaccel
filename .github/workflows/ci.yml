@@ -76,7 +76,14 @@ jobs:
   oci:
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
+      contents: read
+      attestations: write
       packages: write
+    needs:
+      - gopls
+      - lint
+      - test
     steps:
       - uses: actions/checkout@v5
 
@@ -112,6 +119,11 @@ jobs:
           extra-args: |
             --timestamp=${{ steps.timestamp.outputs.timestamp }}
 
+      - name: Generate SBOM for container
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.build.outputs.tags }}
+
       - name: Push images
         id: push
         uses: redhat-actions/push-to-registry@v2
@@ -119,4 +131,12 @@ jobs:
           tags: ${{ steps.build.outputs.tags }}
           username: ${{ github.actor }}
           password: ${{ github.token }}
-        if: ${{ github.ref == 'refs/heads/main' }}
+        # if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: ${{ steps.namespace.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+        # if: ${{ github.ref == 'refs/heads/main' }}
