@@ -94,7 +94,7 @@ jobs:
         id: namespace
         run: >-
           echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          echo "registry=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          && echo "registry=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Extract docker metadata
         id: meta
