@@ -56,6 +56,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 					output, err := cmd.CombinedOutput()
 					require.NoError(t, err, string(output))
 				},
+				true,
 			)
 		})
 	}
