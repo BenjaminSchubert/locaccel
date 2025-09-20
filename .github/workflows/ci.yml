@@ -137,6 +137,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
           registry: ${{ steps.namespace.outputs.registry }}
+        # if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Push images
         id: push
@@ -151,5 +152,13 @@ jobs:
           subject-name: ${{ steps.namespace.outputs.image }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+        # if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Generate SBOM attestation
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ steps.namespace.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom.cyclonedx.json
+          push-to-registry: true
         # if: ${{ github.ref == 'refs/heads/main' }}
