@@ -72,3 +72,51 @@ jobs:
 
       - name: Run gopls
         run: make gopls-check
+
+  oci:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Compute the image namespace
+        id: namespace
+        run: echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Extract docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.namespace.outputs.image }}
+          labels: |
+            org.opencontainers.image.created={{commit_date 'YYYY-MM-DDTHH:mm:ss.SSS[Z]'}}
+            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
+          tags: |
+            type=edge
+            type=ref,event=pr
+
+      - name: Compute the timestamp for the image build
+        id: timestamp
+        run: echo "timestamp=$(git log -1 --pretty=%ct ${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }})" >> $GITHUB_OUTPUT
+
+      - name: Build container image
+        id: build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          platforms: linux/amd64, linux/arm64
+          containerfiles: Containerfile
+          oci: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          extra-args: |
+            --timestamp=${{ steps.timestamp.outputs.timestamp }}
+
+      - name: Push images
+        id: push
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          tags: ${{ steps.build.outputs.tags }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        if: ${{ github.ref == 'refs/heads/main' }}

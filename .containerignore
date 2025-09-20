@@ -1,0 +1,9 @@
+*
+!.git/
+!go.mod
+!go.sum
+!cmd
+!internal
+!LICENSE
+**/*_gen.go
+**/*_gen_test.go

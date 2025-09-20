@@ -1,3 +1,5 @@
+[![CI](https://github.com/BenjaminSchubert/locaccel/actions/workflows/ci.yml/badge.svg)](https://github.com/BenjaminSchubert/locaccel/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/BenjaminSchubert/locaccel/graph/badge.svg?token=8GLYR6RCR3)](https://codecov.io/gh/BenjaminSchubert/locaccel)
 ![GitHub License MIT](https://img.shields.io/github/license/BenjaminSchubert/locaccel)
 ![Experimental status notice](https://img.shields.io/badge/Status-Experimental-red)
 
