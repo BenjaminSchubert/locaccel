@@ -108,6 +108,7 @@ func RunIntegrationTestsForHandler(
 	handlerName string,
 	registerHandler func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL),
 	test func(t *testing.T, serverURL string),
+	supportsOfflineMode bool,
 ) {
 	t.Helper()
 
@@ -160,6 +161,10 @@ func RunIntegrationTestsForHandler(
 
 	t.Run("UpstreamDown", func(t *testing.T) {
 		t.Parallel()
+
+		if !supportsOfflineMode {
+			t.Skip("Offline mode is not yet supported here")
+		}
 
 		logger := TestLogger(t)
 		handler := &http.ServeMux{}
