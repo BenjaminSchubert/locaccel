@@ -126,14 +126,21 @@ jobs:
         uses: anchore/sbom-action@v0
         with:
           image: podman:${{ steps.build.outputs.tags }}
+          output-file: sbom.cyclonedx.json
+          format: cyclonedx-json
+
+      - name: Log in to ghcr
+        uses: redhat-actions/podman-login@v1
+        with:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+          registry: ghcr.io/${{ github.repository_owner }}
 
       - name: Push images
         id: push
         uses: redhat-actions/push-to-registry@v2
         with:
           tags: ${{ steps.build.outputs.tags }}
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
         # if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Generate artifact attestation
@@ -142,4 +149,5 @@ jobs:
           subject-name: ${{ steps.namespace.outputs.image }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+          sbom-path: sbom.cyclonedx.json
         # if: ${{ github.ref == 'refs/heads/main' }}
