@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-//go:generate msgp -io=false
+//go:generate go tool github.com/tinylib/msgp -io=false
 //msgp:replace http.Header with:map[string][]string
 //msgp:tuple CachedResponse
 
