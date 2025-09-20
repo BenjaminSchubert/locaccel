@@ -87,6 +87,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Enable podman socket
+        run: systemctl --user start podman.socket
+
       - name: Compute the image namespace
         id: namespace
         run: echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
@@ -122,7 +125,7 @@ jobs:
       - name: Generate SBOM for container
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ steps.build.outputs.tags }}
+          image: podman:${{ steps.build.outputs.tags }}
 
       - name: Push images
         id: push
