@@ -25,11 +25,11 @@ fix: .cache/bin/golangci-lint generate
 	$< fmt
 
 test: generate
-	go test -coverprofile .coverage ./...
+	go test -coverprofile .coverage -coverpkg=./... ./...
 	go tool cover -func .coverage
 
-gopls-check:
-	@res=$$(find . -name "*.go" -not -name "*_gen.go" -not -name "*_gen_test.go" -exec gopls check {} \;); echo $${res} && [[ -z $${res} ]]
+gopls-check: generate
+	@find . -name "*.go" -not -name "*_gen.go" -not -name "*_gen_test.go" -exec gopls check {} \; | awk '{print} END{if(NR) exit 1}'
 
 generate: internal/httpclient/types_gen.go internal/database/internal/dbtestutils/dbutilstestutils_gen.go
 internal/httpclient/types_gen.go: internal/httpclient/types.go
