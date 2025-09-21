@@ -13,7 +13,7 @@ jobs:
 
   oci_image:
     name: oci
-    uses: ./.github/workflows/oci_image.yml
+    uses: ./.github/workflows/oci.yml
     needs:
       - test
     with:
