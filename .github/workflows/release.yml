@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  oci_image:
+    name: oci
+    uses: ./.github/workflows/oci_image.yml
+    needs:
+      - test
+    with:
+      publish: true
+      tags: |
+        type=semver,pattern={{version}}
+        type=semver,pattern={{major}}.{{minor}}
+        type=semver,pattern={{major}}
+    permissions:
+      id-token: write
+      contents: read
+      attestations: write
+      packages: write
+
+  package:
+    uses: ./.github/workflows/package.yml
+
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs:
+      - package
+      - oci_image
+      - test
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Extract git tag information
+        id: taginfo
+        run: >-
+          echo "body=$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})" | tee --append $GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: locaccel-packages
+          path: dist/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ${{ steps.taginfo.outputs.body }}
+          files: |
+            dist/*.tar.gz
+          fail_on_unmatched_files: true
+          generate_release_notes: true

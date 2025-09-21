@@ -9,137 +9,25 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
+    uses: ./.github/workflows/test.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: stable
+  package:
+    uses: ./.github/workflows/package.yml
 
-      - name: Generate code
-        run: go generate ./...
-
-      - name: Test
-        run: go run gotest.tools/gotestsum@latest --hide-summary=all --junitfile=junit.xml --format=testname -- -coverpkg=./... -coverprofile .coverage ./...
-
-      - name: Test Summary
-        uses: test-summary/action@v2
-        with:
-          paths: "junit.xml"
-          show: "fail, skip"
-        if: ${{ !cancelled() }}
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        if: ${{ !cancelled() }}
-        with:
-          files: .coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: stable
-
-      - name: Generate code
-        run: go generate ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.1
-
-  gopls:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: stable
-
-      - name: Install gopls
-        run: go install golang.org/x/tools/gopls@latest
-
-      - name: Generate code
-        run: go generate ./...
-
-      - name: Run gopls
-        run: make gopls-check
-
-  oci:
-    runs-on: ubuntu-latest
+  oci_image:
+    name: oci
+    uses: ./.github/workflows/oci.yml
+    needs:
+      - test
+    with:
+      publish: ${{ github.ref == 'refs/heads/main' }}
+      tags: |
+        type=edge
+        type=ref,event=pr
     permissions:
       id-token: write
       contents: read
       attestations: write
       packages: write
-    needs:
-      - gopls
-      - lint
-      - test
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Compute the image namespace and registry
-        id: namespace
-        run: >-
-          echo "image=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-          && echo "registry=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
-      - name: Extract docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.namespace.outputs.image }}
-          labels: |
-            org.opencontainers.image.created={{commit_date 'YYYY-MM-DDTHH:mm:ss.SSS[Z]'}}
-            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}
-          tags: |
-            type=edge
-            type=ref,event=pr
-
-      - name: Compute the timestamp for the image build
-        id: timestamp
-        run: echo "timestamp=$(git log -1 --pretty=%ct ${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.revision'] }})" >> $GITHUB_OUTPUT
-
-      - name: Build container image
-        id: build
-        uses: redhat-actions/buildah-build@v2
-        with:
-          platforms: linux/amd64, linux/arm64
-          containerfiles: Containerfile
-          oci: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          extra-args: |
-            --timestamp=${{ steps.timestamp.outputs.timestamp }}
-
-      - name: Log in to ghcr
-        uses: redhat-actions/podman-login@v1
-        with:
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-          registry: ${{ steps.namespace.outputs.registry }}
-        if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Push images
-        id: push
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          tags: ${{ steps.build.outputs.tags }}
-        if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-name: ${{ steps.namespace.outputs.image }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
-        if: ${{ github.ref == 'refs/heads/main' }}
