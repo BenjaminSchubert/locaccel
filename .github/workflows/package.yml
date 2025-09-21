@@ -1,0 +1,27 @@
+name: package
+
+on:
+  workflow_call:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Generate code
+        run: go generate ./...
+
+      - name: Package binary
+        run: SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) ./.github/scripts/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: locaccel-packages
+          path: dist/*
+          if-no-files-found: error
