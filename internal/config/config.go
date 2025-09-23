@@ -117,18 +117,19 @@ func Parse(configPath string) (*Config, error) {
 func Default() *Config {
 	conf := getBaseConfig()
 	conf.GoProxies = []GoProxy{
-		{"https://proxy.golang.org", 3136, nil},
+		{"https://proxy.golang.org", 3143, nil},
 	}
 	conf.OciRegistries = []OciRegistry{
 		{"https://registry-1.docker.io", 3131, nil},
 		{"https://gcr.io", 3132, nil},
 		{"https://quay.io", 3133, nil},
+		{"https://ghcr.io", 3134, nil},
 	}
 	conf.NpmRegistries = []NpmRegistry{
-		{"https://registry.npmjs.org/", "http", 3135, nil},
+		{"https://registry.npmjs.org/", "http", 3144, nil},
 	}
 	conf.PyPIRegistries = []PyPIRegistry{
-		{"https://pypi.org/", "https://files.pythonhosted.org", 3134, nil},
+		{"https://pypi.org/", "https://files.pythonhosted.org", 3145, nil},
 	}
 	conf.Proxies = []Proxy{{
 		[]string{

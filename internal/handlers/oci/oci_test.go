@@ -86,6 +86,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 		{"docker.io", "https://registry-1.docker.io", "docker.io/alpine"},
 		{"gcr.io", "https://gcr.io", "gcr.io/distroless/static"},
 		{"quay.io", "https://quay.io", "quay.io/navidys/prometheus-podman-exporter"},
+		{"ghcr.io", "https://ghcr.io", "ghcr.io/benjaminschubert/locaccel"},
 	} {
 		t.Run(testcase.registry, func(t *testing.T) {
 			t.Parallel()
