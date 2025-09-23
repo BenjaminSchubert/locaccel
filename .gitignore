@@ -1,6 +1,7 @@
 .cache/
 .coverage
 build/
+dist/
 
 *_gen.go
 *_gen_test.go
