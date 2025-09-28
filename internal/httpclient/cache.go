@@ -69,6 +69,7 @@ func NewCache(
 	}
 
 	cache := Cache{db, fileCache, logger, make(chan struct{}), &sync.WaitGroup{}, &sync.Mutex{}}
+	cache.stopWait.Add(1)
 	go cache.ManageCache()
 	return &cache, nil
 }
@@ -226,7 +227,6 @@ func (c *Cache) pruneDatabaseEntry(key string, value *database.Entry[CachedRespo
 }
 
 func (c *Cache) ManageCache() {
-	c.stopWait.Add(1)
 	defer c.stopWait.Done()
 	ticker := time.NewTimer(15 * time.Minute)
 	defer ticker.Stop()
