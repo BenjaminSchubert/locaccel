@@ -1,0 +1,25 @@
+name: Go Dependency Submission
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  go-action-detection:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Run snapshot action
+        uses: actions/go-dependency-submission@v2
+        with:
+            go-mod-path: go.mod
+            go-build-target: cmd/locaccel/locaccel.go
