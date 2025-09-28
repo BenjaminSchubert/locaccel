@@ -51,7 +51,7 @@ jobs:
           echo "$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})" | tee --append $GITHUB_ENV
           echo "EOF" | tee --append $GITHUB_ENV
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: locaccel-packages
           path: dist/
