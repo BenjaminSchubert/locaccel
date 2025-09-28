@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"testing"
 
@@ -31,7 +30,8 @@ func TestInstallGoPackages(t *testing.T) {
 			require.NoError(t, err)
 			root := path.Dir(path.Dir(path.Dir(cwd)))
 
-			cmd := exec.Command( //nolint:gosec
+			testutils.Execute(
+				t,
 				"podman",
 				"run",
 				"--rm",
@@ -48,8 +48,6 @@ func TestInstallGoPackages(t *testing.T) {
 				"get",
 				"./...",
 			)
-			output, err := cmd.CombinedOutput()
-			require.NoError(t, err, string(output))
 		},
 		true,
 	)

@@ -343,7 +343,7 @@ func (c *Client) forwardRequestWithUpstream(
 		if err != nil {
 			logger.Debug().Stringer("upstream", upstream).Msg("Upstream returned an error")
 		} else {
-			return
+			return resp, timeAtRequestCreated, timeAtResponseReceived, err
 		}
 	}
 

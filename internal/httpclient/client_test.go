@@ -55,7 +55,7 @@ func makeRequest(
 ) (resp *http.Response, body string) {
 	t.Helper()
 
-	req, err := http.NewRequest(method, uri, nil)
+	req, err := http.NewRequestWithContext(t.Context(), method, uri, nil)
 	require.NoError(t, err)
 	logger := testutils.TestLogger(t)
 	req = req.WithContext(logger.WithContext(req.Context()))

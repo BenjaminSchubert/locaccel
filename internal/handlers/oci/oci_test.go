@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"testing"
 	"text/template"
@@ -62,10 +61,7 @@ rootless_storage_path="{{.}}"`,
 	)
 
 	t.Cleanup(func() {
-		require.NoError(
-			t,
-			exec.Command("podman", "unshare", "rm", "-rf", dataPath).Run(), //nolint:gosec
-		)
+		testutils.Execute(t, "podman", "unshare", "rm", "-rf", dataPath)
 	})
 
 	return []string{
@@ -104,10 +100,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 					env := preparePodmanIsolation(
 						t, path.Join(t.TempDir(), "podman"), serverURL, testcase.registry)
 
-					cmd := exec.Command("podman", "pull", testcase.image) //nolint:gosec
-					cmd.Env = append(cmd.Env, env...)
-					output, err := cmd.CombinedOutput()
-					require.NoErrorf(t, err, "Running podman failed:\n%s", output)
+					testutils.ExecuteWithEnv(t, "podman", []string{"pull", testcase.image}, env)
 				},
 				false,
 			)
