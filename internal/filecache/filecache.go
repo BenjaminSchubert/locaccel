@@ -149,7 +149,7 @@ func (f *FileCache) Stat(hash string) (os.FileInfo, error) {
 func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err error) {
 	dirs, err := os.ReadDir(f.root)
 	if err != nil {
-		return
+		return count, totalSize, err
 	}
 
 	var files []os.DirEntry
@@ -162,7 +162,7 @@ func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err err
 
 		files, err = os.ReadDir(path.Join(f.root, dir.Name()))
 		if err != nil {
-			return
+			return count, totalSize, err
 		}
 
 		count += int64(len(files))
@@ -170,14 +170,14 @@ func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err err
 		for _, fp := range files {
 			fileInfo, err = fp.Info()
 			if err != nil {
-				return
+				return count, totalSize, err
 			}
 
 			totalSize.Bytes += fileInfo.Size()
 		}
 	}
 
-	return
+	return count, totalSize, err
 }
 
 func (f *FileCache) Prune(logger *zerolog.Logger) (int64, error) {

@@ -3,10 +3,7 @@ package npm_test
 import (
 	"net/http"
 	"net/url"
-	"os/exec"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
@@ -31,7 +28,8 @@ func TestInstallNpmPackages(t *testing.T) {
 		func(t *testing.T, serverURL string) {
 			t.Helper()
 
-			cmd := exec.Command( //nolint:gosec
+			testutils.Execute(
+				t,
 				"podman",
 				"run",
 				"--rm",
@@ -49,8 +47,6 @@ func TestInstallNpmPackages(t *testing.T) {
 				"react",
 				"@npmcli/promise-spawn",
 			)
-			output, err := cmd.CombinedOutput()
-			require.NoError(t, err, string(output))
 		},
 		true,
 	)

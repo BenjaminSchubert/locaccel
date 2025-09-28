@@ -1,12 +1,15 @@
 package testutils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os/exec"
 	"path"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,4 +192,43 @@ func RunIntegrationTestsForHandler(
 		// Run the test again, with the cache disconnected
 		test(t, server.URL)
 	})
+}
+
+func Execute(t *testing.T, name string, arg ...string) {
+	t.Helper()
+	ExecuteWithEnv(t, name, arg, nil)
+}
+
+func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
+	t.Helper()
+
+	baseCtx := t.Context()
+	if t.Context().Err() != nil && errors.Is(t.Context().Err(), context.Canceled) {
+		baseCtx = context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, arg...)
+
+	output, err := cmd.CombinedOutput()
+	displayCmd := strings.Join(append([]string{name}, arg...), " ")
+	require.NotErrorIs(
+		t,
+		err,
+		context.DeadlineExceeded,
+		"command '%s' timed out after 1m:\n-----\n%s\n-----",
+		displayCmd,
+		output,
+	)
+	require.NotErrorIs(
+		t,
+		ctx.Err(),
+		context.DeadlineExceeded,
+		"command '%s' timed out after 1m:\n-----\n%s\n-----",
+		displayCmd,
+		output,
+	)
+	require.NoError(t, err, "Command '%s' failed:\n-----\n%s\n-----", displayCmd, output)
 }

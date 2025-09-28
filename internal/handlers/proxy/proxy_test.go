@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os/exec"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -40,7 +39,8 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 				func(t *testing.T, serverURL string) {
 					t.Helper()
 
-					cmd := exec.Command( //nolint:gosec
+					testutils.Execute(
+						t,
 						"podman",
 						"run",
 						"--rm",
@@ -53,8 +53,6 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 						"-c",
 						tc.command,
 					)
-					output, err := cmd.CombinedOutput()
-					require.NoError(t, err, string(output))
 				},
 				true,
 			)
