@@ -23,13 +23,6 @@ jobs:
       - name: Test
         run: go run gotest.tools/gotestsum@latest --hide-summary=all --junitfile=junit.xml --format=testname -- -race -coverpkg=./... -coverprofile .coverage ./...
 
-      - name: Test Summary
-        uses: test-summary/action@v2
-        with:
-          paths: "junit.xml"
-          show: "fail, skip"
-        if: ${{ !cancelled() }}
-
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         if: ${{ !cancelled() }}
