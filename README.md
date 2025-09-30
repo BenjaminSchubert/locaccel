@@ -51,6 +51,8 @@ Locaccel aims for the sweet spot: simple setup, low resource usage, with a broad
 
 ### Installation
 
+#### Docker/Podman
+
 locaccel is distributed as a OCI image under `ghcr.io/benjaminschubert/locaccel`.
 We support the following tags:
 
@@ -60,8 +62,50 @@ We support the following tags:
 - `X.Y`, which designates a specific major.minor version
 - `X.Y.Z`, which designates a specific major.minor.patch version
 
+You can get started by running:
+
+```bash
+docker run \
+  --name locaccel \
+  --volume locaccel:/cache:rw,Z \
+  # For docker.io
+  --publish 3131:3131 \
+  # For gcr.io
+  --publish 3132:3132 \
+  # For quay.io
+  --publish 3133:3133 \
+  # For ghcr.io \
+  --publish 3134:3134 \
+  # For ubuntu/debian
+  --publish 3142:3142 \
+  # For proxy.golang.org
+  --publish 3143:3143 \
+  # For registry.npmjs.org
+  --publish 3144:3144 \
+  # For pypi.org
+  --publish 3145:3145 \
+  ghcr.io/benjaminschubert/locaccel
+```
+
+#### Linux
+
 You can also download [binaries](https://github.com/BenjaminSchubert/locaccel/releases/latest) directly,
 published as part of the releases.
+
+You can then install it, e.g. with systemd:
+
+```bash
+tar xvf locaccel.*.tar.gz
+cp locaccel /usr/local/bin/locaccel
+cp locaccel.service /etc/systemd/system/locaccel.service
+useradd --system locaccel
+mkdir /var/cache/locaccel
+chown locaccel: /var/cache/locaccel
+# Optionally create a configuration file at /etc/locaccel/locaccel.yaml
+systemctl daemon-reload
+systemctl start locaccel
+systemctl enable locaccel
+```
 
 ### Configuration
 

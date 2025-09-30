@@ -16,4 +16,5 @@ FROM scratch
 
 COPY --from=build /build/locaccel /locaccel
 COPY LICENSE /LICENSE
+ENV LOCACCEL_DEFAULT_CACHE_PATH=/cache
 ENTRYPOINT [ "/locaccel" ]

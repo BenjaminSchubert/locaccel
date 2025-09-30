@@ -23,6 +23,7 @@ for target in "${TARGETS[@]}"; do
     CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -trimpath -ldflags="-s -w" -o "$OUT_PATH" ./cmd/locaccel
     # Include license
     cp LICENSE README.md "${OUT_DIR}"
+    cp integrations/systemd-locaccel.service "${OUT_DIR}/locaccel.service"
     # create archive
     tar \
         --sort=name \
