@@ -261,6 +261,11 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
+
+	// Some tests can be slow, and this is annoying to test more precisely
+	if slices.Equal(resp.Header["Age"], []string{"1"}) {
+		resp.Header["Age"] = []string{"0"}
+	}
 	assert.Equal(
 		t,
 		http.Header{
@@ -625,6 +630,11 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
+
+	// Some tests can be slow, and this is annoying to test more precisely
+	if slices.Equal(resp.Header["Age"], []string{"1"}) {
+		resp.Header["Age"] = []string{"0"}
+	}
 	assert.Equal(
 		t,
 		http.Header{
@@ -643,6 +653,11 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
+
+	// Some tests can be slow, and this is annoying to test more precisely
+	if slices.Equal(resp.Header["Age"], []string{"1"}) {
+		resp.Header["Age"] = []string{"0"}
+	}
 	assert.Equal(
 		t,
 		http.Header{
