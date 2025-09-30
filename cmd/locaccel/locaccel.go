@@ -33,7 +33,11 @@ func main() {
 
 	configPath, configPathSet := os.LookupEnv("LOCACCEL_CONFIG_PATH")
 	if !configPathSet {
-		configPath = "./locaccel.yaml"
+		var ok bool
+		configPath, ok = os.LookupEnv("LOCACCEL_DEFAULT_CONFIG_PATH")
+		if !ok {
+			configPath = "./locaccel.yaml"
+		}
 	}
 
 	conf, err := config.Parse(configPath)

@@ -84,10 +84,15 @@ type Config struct {
 }
 
 func getBaseConfig() *Config {
+	defaultCachePath, ok := os.LookupEnv("LOCACCEL_DEFAULT_CACHE_PATH")
+	if !ok {
+		defaultCachePath = "_cache/"
+	}
+
 	return &Config{
 		Host: "localhost",
 		Cache: Cache{
-			"_cache/",
+			defaultCachePath,
 			false,
 			units.NewDiskQuotaInPercent(10),
 			units.NewDiskQuotaInPercent(20),
