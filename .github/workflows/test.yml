@@ -23,6 +23,10 @@ jobs:
       - name: Test
         run: go run gotest.tools/gotestsum@latest --hide-summary=all --junitfile=junit.xml --format=testname -- -race -coverpkg=./... -coverprofile .coverage ./...
 
+      - name: Remove ascii colors from junit report
+        if: ${{ !cancelled() }}
+        run: sed -e 's/\xEF\xBF\xBD//g' -e 's/\[[0-9;]*[[:alpha:]]//g' -i junit.xml
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         if: ${{ !cancelled() }}
