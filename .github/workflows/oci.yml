@@ -21,6 +21,10 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          filter: tree:0
 
       - name: Compute the image namespace and registry
         id: namespace
