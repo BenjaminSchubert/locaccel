@@ -34,6 +34,6 @@ for target in "${TARGETS[@]}"; do
         --directory="${OUT_DIR}" \
         --create \
         --verbose \
-        --file="dist/locaccel.${GOOS}-${GOARCH}.tar.gz" \
+        --file="dist/locaccel.$(git describe --dirty).${GOOS}-${GOARCH}.tar.gz" \
         .
 done
