@@ -1,0 +1,18 @@
+FROM docker.io/debian:stable-slim
+
+# Test proxy works and apt-get can download files
+RUN printenv | grep http_proxy && \
+    printenv | grep no_proxy && \
+    apt-get update && \
+    apt-get install --no-install-recommends --assume-yes python3-pip npm ruby
+
+# Test pip configuration is mounted and can install packages
+RUN pip3 config list | grep locaccel:3145 && \
+    pip3 install --break-system-packages ruff
+
+# Test npm configuration is mounted and can install packages
+RUN npm config list | grep locaccel:3144 && \
+    npm install -g leftpad
+
+RUN gem sources --list | grep locaccel:3146 && \
+    gem install multi_xml
