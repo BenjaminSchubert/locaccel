@@ -284,7 +284,7 @@ Acquire::https::Proxy "http://<locaccel-url>:<proxy port>/";
 
 In your `registries.conf` file (either at `/etc/containers/registries.conf`, `/etc/containers/registries.d/*` for rootful, or under `${XDG_CONFIR_DIR}/containers/registries.conf`), add the following:
 
-```
+```toml
 # for registry-1.docker.io (docker.io)
 [[registry]]
 prefix="docker.io"
