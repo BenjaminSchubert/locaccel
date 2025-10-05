@@ -322,33 +322,7 @@ Acquire::https::Proxy "http://<locaccel-url>:<proxy port>/";
 
 #### Podman (OCI)
 
-In your `registries.conf` file (either at `/etc/containers/registries.conf`, `/etc/containers/registries.d/*` for rootful, or under `${XDG_CONFIR_DIR}/containers/registries.conf`), add the following:
-
-```
-# for registry-1.docker.io (docker.io)
-[[registry]]
-prefix="docker.io"
-mirror = [
-    # Only set insecure if you use http
-    {"<locaccel-url>:<oci-port>", insecure = true}
-]
-
-# For ghcr.io
-[[registry]]
-prefix="ghcr.io"
-mirror = [
-    # Only set insecure if you use http
-    {"<locaccel-url>:<oci-port>, insecure=true}
-]
-
-# For quay
-[[registry]]
-prefix="quay.io"
-mirror = [
-    # Only set insecure if you use http
-    {"<locaccel-url>:<oci-port>, insecure=true}
-]
-```
+See [the full docs](./docs/ecosystems/podman.md)
 
 
 ## Contributing
