@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -36,6 +37,7 @@ log:
 oci_registries:
   - upstream: https://registry-1.docker.io
     port: 1234
+    upstream_caches: [https://upstream:1234]
 pypi_registries:
   - upstream: https://pypi.org
     cdn: https://files.pythonhosted.org
@@ -61,7 +63,13 @@ pypi_registries:
 			EnableProfiling: true,
 			Log:             config.Log{"error", "console"},
 			OciRegistries: []config.OciRegistry{
-				{Upstream: "https://registry-1.docker.io", Port: 1234},
+				{
+					Upstream: "https://registry-1.docker.io",
+					Port:     1234,
+					UpstreamCaches: []config.SerializableURL{
+						{&url.URL{Scheme: "https", Host: "upstream:1234"}},
+					},
+				},
 			},
 			PyPIRegistries: []config.PyPIRegistry{
 				{Upstream: "https://pypi.org", CDN: "https://files.pythonhosted.org", Port: 1235},

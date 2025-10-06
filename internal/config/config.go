@@ -1,7 +1,6 @@
 package config
 
 import (
-	"net/url"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -13,32 +12,33 @@ import (
 type GoProxy struct {
 	Upstream       string
 	Port           uint16
-	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
 }
+
 type NpmRegistry struct {
 	Upstream       string
 	Scheme         string
 	Port           uint16
-	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
 }
 
 type OciRegistry struct {
 	Upstream       string
 	Port           uint16
-	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
 }
 
 type PyPIRegistry struct {
 	Upstream       string
 	CDN            string
 	Port           uint16
-	UpstreamCaches []*url.URL `yaml:"upstream_caches"`
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
 }
 
 type Proxy struct {
 	AllowedUpstreams []string `yaml:"allowed_upstreams"`
 	Port             uint16
-	UpstreamCaches   []*url.URL `yaml:"upstream_caches"`
+	UpstreamCaches   []SerializableURL `yaml:"upstream_caches"`
 }
 
 type Log struct {
