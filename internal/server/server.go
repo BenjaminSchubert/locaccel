@@ -6,6 +6,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -151,7 +152,7 @@ func setupGoProxy(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	goproxy.RegisterHandler(goProxy.Upstream, handler, client, goProxy.UpstreamCaches)
+	goproxy.RegisterHandler(goProxy.Upstream, handler, client, asURLs(goProxy.UpstreamCaches))
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, goProxy.Port),
@@ -173,7 +174,7 @@ func setupOciRegistry(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	oci.RegisterHandler(registry.Upstream, handler, client, registry.UpstreamCaches)
+	oci.RegisterHandler(registry.Upstream, handler, client, asURLs(registry.UpstreamCaches))
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
@@ -195,7 +196,13 @@ func setupPypiRegistry(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	pypi.RegisterHandler(registry.Upstream, registry.CDN, handler, client, registry.UpstreamCaches)
+	pypi.RegisterHandler(
+		registry.Upstream,
+		registry.CDN,
+		handler,
+		client,
+		asURLs(registry.UpstreamCaches),
+	)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
@@ -222,7 +229,7 @@ func setupNpmRegistry(
 		registry.Scheme,
 		handler,
 		client,
-		registry.UpstreamCaches,
+		asURLs(registry.UpstreamCaches),
 	)
 
 	return createServer(
@@ -245,7 +252,12 @@ func setupProxy(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	proxy.RegisterHandler(proxyConf.AllowedUpstreams, handler, client, proxyConf.UpstreamCaches)
+	proxy.RegisterHandler(
+		proxyConf.AllowedUpstreams,
+		handler,
+		client,
+		asURLs(proxyConf.UpstreamCaches),
+	)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, proxyConf.Port),
@@ -313,4 +325,12 @@ func createServer(
 		},
 		log,
 	}
+}
+
+func asURLs(sURLs []config.SerializableURL) []*url.URL {
+	urls := make([]*url.URL, len(sURLs))
+	for i, url := range sURLs {
+		urls[i] = url.URL
+	}
+	return urls
 }

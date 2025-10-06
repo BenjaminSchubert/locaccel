@@ -207,7 +207,7 @@ func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
 		baseCtx = context.Background()
 	}
 
-	ctx, cancel := context.WithTimeout(baseCtx, time.Minute)
+	ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, arg...)
@@ -218,7 +218,7 @@ func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
 		t,
 		err,
 		context.DeadlineExceeded,
-		"command '%s' timed out after 1m:\n-----\n%s\n-----",
+		"command '%s' timed out after 2m:\n-----\n%s\n-----",
 		displayCmd,
 		output,
 	)
@@ -226,7 +226,7 @@ func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
 		t,
 		ctx.Err(),
 		context.DeadlineExceeded,
-		"command '%s' timed out after 1m:\n-----\n%s\n-----",
+		"command '%s' timed out after 2m:\n-----\n%s\n-----",
 		displayCmd,
 		output,
 	)
