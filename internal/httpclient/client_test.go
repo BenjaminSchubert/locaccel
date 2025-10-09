@@ -8,12 +8,14 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
@@ -761,4 +763,244 @@ func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 		},
 	})
 	validateQueries([]string{"miss"})
+}
+
+func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
+	// Some Services don't implement http caching properly, e.g. ghcr.io
+	t.Parallel()
+
+	client, validateCache, validateQueries := setup(t)
+	count := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count += 1
+		w.Header().Add("Cache-Control", "public")
+		if r.Header.Get("If-None-Match") != "" {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		w.Header().Add("Etag", "123")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{},
+		nil,
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+
+	// And a second time
+	resp2, body2 := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{},
+		nil,
+	)
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello!", body2)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp.Header["Date"],
+					"Etag":           []string{"123"},
+				},
+				http.Header{},
+				time.Time{},
+			},
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp2.Header["Date"],
+					"Etag":           []string{"123"},
+				},
+				http.Header{},
+				time.Time{},
+			},
+		},
+	})
+	validateQueries([]string{"miss", "miss"})
+	assert.Equal(t, 3, count, "Upstream should have been called 3 times")
+}
+
+func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
+	t.Parallel()
+
+	client, validateCache, validateQueries := setup(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var matches []string
+		if ifNoneMatch := r.Header["If-None-Match"]; len(ifNoneMatch) != 0 {
+			matches = strings.Split(ifNoneMatch[0], ", ")
+		}
+
+		w.Header().Add("Cache-Control", "must-revalidate")
+		if slices.Contains(matches, "etag-match") {
+			w.Header().Add("Etag", "etag-match")
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Add("Etag", "no-match")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "Hello!", body)
+
+	resp2, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"If-None-Match": []string{"etag-match"}},
+		nil,
+	)
+	assert.Equal(t, http.StatusNotModified, resp2.StatusCode)
+	assert.Empty(t, body)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date":           resp.Header["Date"],
+					"Etag":           []string{"no-match"},
+					"Cache-Control":  []string{"must-revalidate"},
+				},
+				http.Header{},
+				time.Time{},
+			},
+		},
+	})
+	validateQueries([]string{"miss", "miss"})
+}
+
+func TestClientAddsConditionalQueriesInformation(t *testing.T) {
+	t.Parallel()
+
+	originalLastModified := time.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
+	cachedModifiedSinceNewer := time.Now().UTC().Add(-2 * time.Hour).Format(http.TimeFormat)
+	cachedModifiedSinceOlder := time.Now().UTC().Add(-3 * time.Hour).Format(http.TimeFormat)
+
+	for _, tc := range []struct {
+		description                                              string
+		incomingHeaders                                          http.Header
+		cachedResponses                                          CachedResponses
+		expectedHeaders                                          http.Header
+		hasConditionalInformation, wasOriginalRequestConditional bool
+	}{
+		{
+			"handle-no-entries",
+			http.Header{"Other": {"hello"}},
+			CachedResponses{{}},
+			http.Header{"Other": {"hello"}},
+			false,
+			false,
+		},
+		{
+			"handle-request-conditional-only",
+			http.Header{"If-None-Match": {"123"}, "If-Modified-Since": {originalLastModified}},
+			CachedResponses{{}},
+			http.Header{"If-None-Match": {"123"}, "If-Modified-Since": {originalLastModified}},
+			false,
+			true,
+		},
+		{
+			"add-none-match",
+			http.Header{},
+			CachedResponses{{Headers: http.Header{"Etag": {"123"}}}},
+			http.Header{"If-None-Match": {"123"}},
+			true,
+			false,
+		},
+		{
+			"merges-none-match",
+			http.Header{"If-None-Match": {"request"}},
+			CachedResponses{{Headers: http.Header{"Etag": {"123"}}}, {Headers: http.Header{"Etag": {"234"}}}},
+			http.Header{"If-None-Match": {"123, 234, request"}},
+			true,
+			true,
+		},
+		{
+			"add-if-modified-since",
+			http.Header{},
+			CachedResponses{{Headers: http.Header{"Last-Modified": {cachedModifiedSinceNewer}}}},
+			http.Header{"If-Modified-Since": {cachedModifiedSinceNewer}},
+			true,
+			false,
+		},
+		{
+			"prefers-latest-if-modified-since",
+			http.Header{},
+			CachedResponses{
+				{Headers: http.Header{"Last-Modified": {cachedModifiedSinceNewer}}},
+				{Headers: http.Header{"Last-Modified": {cachedModifiedSinceOlder}}},
+			},
+			http.Header{"If-Modified-Since": {cachedModifiedSinceNewer}},
+			true,
+			false,
+		},
+		{
+			"no-override-if-modified-since",
+			http.Header{"If-Modified-Since": {originalLastModified}},
+			CachedResponses{
+				{Headers: http.Header{"Last-Modified": {cachedModifiedSinceNewer}}},
+			},
+			http.Header{"If-Modified-Since": {originalLastModified}},
+			false,
+			true,
+		},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
+
+			logger := testutils.TestLogger(t)
+			cache, err := NewCache(
+				t.TempDir(),
+				units.Bytes{Bytes: 100},
+				units.Bytes{Bytes: 1000},
+				logger,
+			)
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, cache.Close()) })
+
+			c := New(&http.Client{Transport: &http.Transport{}}, cache, logger, true, nil)
+
+			req := &http.Request{Header: tc.incomingHeaders}
+			hasConditional, wasConditional := c.addConditionalRequestInformation(
+				req,
+				&database.Entry[CachedResponses]{Value: tc.cachedResponses},
+			)
+
+			assert.Equal(t, tc.hasConditionalInformation, hasConditional)
+			assert.Equal(t, tc.wasOriginalRequestConditional, wasConditional)
+			assert.Equal(t, tc.expectedHeaders, req.Header)
+		})
+	}
 }

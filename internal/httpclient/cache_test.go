@@ -25,11 +25,15 @@ func validateCache(
 ) {
 	t.Helper()
 
-	expectedHashes := make([]string, 0, len(expected))
+	expectedHashesMap := map[string]struct{}{}
 	for _, responses := range expected {
 		for _, resp := range responses {
-			expectedHashes = append(expectedHashes, resp.ContentHash)
+			expectedHashesMap[resp.ContentHash] = struct{}{}
 		}
+	}
+	expectedHashes := make([]string, 0, len(expectedHashesMap))
+	for hash := range expectedHashesMap {
+		expectedHashes = append(expectedHashes, hash)
 	}
 
 	entriesInDB := make(map[string]CachedResponses, len(expected))
