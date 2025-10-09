@@ -167,13 +167,7 @@ func (c *Client) serveFromCache(
 		return nil
 	}
 
-	resp := c.serveFromCachedCandidates(candidates, forceStale, logger)
-	if resp != nil {
-		return resp
-	}
-
-	// All responses are stale, we need to revalidate
-	return nil
+	return c.serveFromCachedCandidates(candidates, forceStale, logger)
 }
 
 func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Response, error) {
@@ -201,8 +195,14 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	hasConditionalInformation := false
+	wasOriginalRequestConditional := false
+	originalRequest := req.Clone(req.Context())
+
 	if dbEntry != nil {
-		hasConditionalInformation = c.addConditionalRequestInformation(req, dbEntry)
+		hasConditionalInformation, wasOriginalRequestConditional = c.addConditionalRequestInformation(
+			req,
+			dbEntry,
+		)
 	}
 
 	logger.Debug().Msg("unable to serve from cache")
@@ -226,7 +226,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	if hasConditionalInformation && resp.StatusCode == http.StatusNotModified {
-		resp, err := c.updateCache(
+		cacheResp, err := c.updateCache(
 			cacheKey,
 			dbEntry,
 			resp,
@@ -237,10 +237,35 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		if err != nil && !errors.Is(err, errNoMatchingEntryInCache) {
 			panic(err)
 		}
-		if resp != nil {
+		if cacheResp != nil {
 			logger.Debug().Msg("request re-validated, serving from cache")
 			c.notify(req, "revalidated")
+			return cacheResp, nil
+		}
+		if wasOriginalRequestConditional {
+			logger.Debug().Msg("passing through conditional response from conditional request")
+			c.notify(req, "miss")
 			return resp, nil
+		}
+
+		logger.Warn().
+			Msg("Received a NotModified answer but could not match it to an actual response. Retrying")
+		resp, timeAtRequestCreated, timeAtResponseReceived, err = c.forwardRequestWithUpstream(
+			originalRequest,
+			upstreamCache,
+			logger,
+		)
+		if err != nil || resp.StatusCode >= 500 {
+			if dbEntry != nil {
+				if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
+					logger.Warn().
+						Err(err).
+						Msg("unable to contact upstream, serving stale response from cache")
+					c.notify(req, "hit")
+					return cRep, nil
+				}
+			}
+			return resp, err
 		}
 	}
 
@@ -266,9 +291,12 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 func (c *Client) addConditionalRequestInformation(
 	req *http.Request,
 	dbEntry *database.Entry[CachedResponses],
-) bool {
+) (hasConditionalInformation, wasOriginalRequestConditional bool) {
 	etags := []string{}
 	lastModified := []string{}
+
+	originalIfNoneMatch := req.Header["If-None-Match"]
+	originalIfModifiedSince := req.Header["If-Modified-Since"]
 
 	for _, entry := range dbEntry.Value {
 		etags = append(etags, entry.Headers["Etag"]...)
@@ -277,9 +305,8 @@ func (c *Client) addConditionalRequestInformation(
 	}
 
 	if len(etags) != 0 {
-		originalEtag := req.Header["If-None-Match"]
-		if originalEtag != nil {
-			etags = append(etags, originalEtag...)
+		if originalIfNoneMatch != nil {
+			etags = append(etags, originalIfNoneMatch...)
 		}
 
 		// Some servers don't support more than one If-None-Match headers
@@ -287,7 +314,7 @@ func (c *Client) addConditionalRequestInformation(
 	}
 
 	if len(lastModified) != 0 {
-		if req.Header["If-Modified-Since"] == nil {
+		if originalIfModifiedSince == nil {
 			if len(lastModified) == 1 {
 				req.Header["If-Modified-Since"] = []string{lastModified[0]}
 			} else {
@@ -302,14 +329,19 @@ func (c *Client) addConditionalRequestInformation(
 						}
 					}
 				}
-				if maxLastModifiedTime.Equal(time.Time{}) {
+				if !maxLastModifiedTime.Equal(time.Time{}) {
 					req.Header["If-Modified-Since"] = []string{maxLastModified}
 				}
 			}
+		} else {
+			// Reset the lastModified collected headers, we can't use them
+			lastModified = nil
 		}
 	}
 
-	return len(etags) != 0 || len(lastModified) != 0
+	return len(etags) != 0 ||
+			len(lastModified) != 0, len(originalIfNoneMatch) != 0 ||
+			len(originalIfModifiedSince) != 0
 }
 
 func (c *Client) forwardRequestWithUpstream(
@@ -441,6 +473,7 @@ func (c *Client) updateCache(
 	if etag := resp.Header.Get("Etag"); etag != "" {
 		for idx, cachedResp := range dbEntry.Value {
 			if httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("Etag")) {
+				logger.Trace().Str("etag", etag).Msg("conditional request matched by Etag")
 				return c.refreshResponseAndServe(
 					cacheKey,
 					dbEntry,
@@ -457,6 +490,9 @@ func (c *Client) updateCache(
 	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
 		for idx, cachedResp := range dbEntry.Value {
 			if lastModified == cachedResp.Headers.Get("Last-Modified") {
+				logger.Trace().
+					Str("last-modified", lastModified).
+					Msg("conditional request matched by Last-Modified")
 				return c.refreshResponseAndServe(
 					cacheKey,
 					dbEntry,
@@ -470,7 +506,7 @@ func (c *Client) updateCache(
 		}
 	}
 
-	return resp, errNoMatchingEntryInCache
+	return nil, errNoMatchingEntryInCache
 }
 
 func (c *Client) refreshResponseAndServe(
