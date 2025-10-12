@@ -45,7 +45,7 @@ func (d *DiskQuota) UnmarshalYAML(value *yaml.Node) error {
 
 	valf, err := strconv.ParseFloat(groups[1], 64)
 	if err != nil {
-		return fmt.Errorf("%s: %w", ErrInvalidQuotaFormat, err)
+		return fmt.Errorf("%w: %s", ErrInvalidQuotaFormat, err)
 	}
 
 	d.bytes = Bytes{}
