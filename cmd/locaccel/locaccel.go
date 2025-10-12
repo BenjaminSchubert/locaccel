@@ -26,7 +26,7 @@ func getVersion() string {
 }
 
 func main() {
-	panicLogger, err := logging.CreateLogger(zerolog.WarnLevel, "json")
+	panicLogger, err := logging.CreateLogger(zerolog.WarnLevel, "json", os.Stderr)
 	if err != nil {
 		panic("BUG: invalid default logger")
 	}
@@ -52,7 +52,7 @@ func main() {
 	if err != nil {
 		panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
 	}
-	logger, err := logging.CreateLogger(logLevel, conf.Log.Format)
+	logger, err := logging.CreateLogger(logLevel, conf.Log.Format, os.Stderr)
 	if err != nil {
 		panicLogger.Fatal().Err(err).Msg("Unable to initialize logger")
 	}
