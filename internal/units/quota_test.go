@@ -2,6 +2,9 @@ package units_test
 
 import (
 	"bytes"
+	"fmt"
+	"io/fs"
+	"math"
 	"strings"
 	"testing"
 
@@ -33,6 +36,26 @@ func TestCanParseQuotaPercent(t *testing.T) {
 	require.Equal(t, units.NewDiskQuotaInPercent(10), quota)
 }
 
+func TestRejectInvalidQuota(t *testing.T) {
+	t.Parallel()
+
+	quota := units.DiskQuota{}
+	decoder := yaml.NewDecoder(bytes.NewBufferString("hello"))
+
+	err := decoder.Decode(&quota)
+	require.ErrorIs(t, err, units.ErrInvalidQuotaFormat)
+}
+
+func TestRejectQuotaBiggerThanMaxFloat(t *testing.T) {
+	t.Parallel()
+
+	quota := units.DiskQuota{}
+	decoder := yaml.NewDecoder(bytes.NewBufferString(fmt.Sprintf("1%f%%", math.MaxFloat64)))
+
+	err := decoder.Decode(&quota)
+	require.ErrorIs(t, err, units.ErrInvalidQuotaFormat)
+}
+
 func TestCanEncodeToYamlForPercentages(t *testing.T) {
 	t.Parallel()
 
@@ -58,4 +81,21 @@ func TestCanGetBytesFromPercent(t *testing.T) {
 	b, err := quota.Bytes(t.TempDir())
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, b.Bytes, int64(10))
+}
+
+func TestCanGetBytesFromAbsolute(t *testing.T) {
+	t.Parallel()
+
+	quota := units.NewDiskQuotaInBytes(units.Bytes{10})
+	b, err := quota.Bytes(t.TempDir())
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, b.Bytes, int64(10))
+}
+
+func TestHandlesRequestingQuotaInPercentFromNonExistentMountpoint(t *testing.T) {
+	t.Parallel()
+
+	quota := units.NewDiskQuotaInPercent(10)
+	_, err := quota.Bytes(t.TempDir() + "/nonexistent")
+	require.ErrorIs(t, err, fs.ErrNotExist)
 }
