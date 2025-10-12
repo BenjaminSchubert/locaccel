@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -13,18 +12,20 @@ import (
 
 var ErrInvalidLogFormat = errors.New("invalid log format requested")
 
-func CreateLogger(level zerolog.Level, format string) (zerolog.Logger, error) {
+func init() {
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
+}
 
+func CreateLogger(level zerolog.Level, format string, dest io.Writer) (zerolog.Logger, error) {
 	var w io.Writer
 	switch format {
 	case "console":
 		w = zerolog.NewConsoleWriter(func(w *zerolog.ConsoleWriter) {
-			w.Out = os.Stderr
+			w.Out = dest
 			w.TimeFormat = time.RFC3339
 		})
 	case "json":
-		w = os.Stderr
+		w = dest
 	default:
 		return zerolog.Logger{}, fmt.Errorf("%w: %s", ErrInvalidLogFormat, format)
 	}

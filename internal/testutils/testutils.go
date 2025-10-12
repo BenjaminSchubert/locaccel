@@ -10,6 +10,8 @@ import (
 )
 
 func TestLogger(t *testing.T) *zerolog.Logger {
+	t.Helper()
+
 	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(t)))
 	return &logger
 }
