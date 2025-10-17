@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"os/exec"
 	"path"
 	"strings"
@@ -231,4 +232,6 @@ func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
 		output,
 	)
 	require.NoError(t, err, "Command '%s' failed:\n-----\n%s\n-----", displayCmd, output)
+
+	os.Stdout.Write(output)
 }
