@@ -174,7 +174,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	logger := hlog.FromRequest(req)
 
 	// We only support caching GET requests
-	if req.Method != http.MethodGet {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		resp, _, _, err := c.forwardRequest(req, logger)
 		c.notify(req, "miss")
 		return resp, err

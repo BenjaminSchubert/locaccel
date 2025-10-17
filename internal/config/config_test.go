@@ -188,6 +188,9 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 					Port: 3142,
 				},
 			},
+			RubyGemRegistries: []config.RubyGemRegistry{
+				{Upstream: "https://rubygems.org", Port: 3146},
+			},
 		},
 		conf,
 	)

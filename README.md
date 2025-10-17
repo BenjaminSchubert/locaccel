@@ -29,6 +29,7 @@ with still only one cache reaching out to the Internet.
 - PyPI‑compatible registries
 - NPM‑compatible registries
 - Go module proxies
+- Ruby Gems
 - Container registries (Docker Hub, GitHub Container Registry, Google Container Registry, Quay, …)
 - Generic HTTP proxy – works for Debian/Ubuntu package mirrors and any other HTTP‑based source.
 
@@ -84,6 +85,8 @@ docker run \
   --publish 3144:3144 \
   # For pypi.org
   --publish 3145:3145 \
+  # For rubygems.org
+  --publish 3146:3146 \
   ghcr.io/benjaminschubert/locaccel
 ```
 
@@ -231,6 +234,16 @@ proxies:
       # to be tried first before hitting the upstream. This allows for chaining
       # caches or build a mesh in order to more efficiently reduce downloads
       upstream_caches: []
+
+rubygem_registries:
+      # The upstream rubygem registry
+    - upstream: https://rubygems.org
+      # The port on which to expose the cache locally
+      port: 3146
+      # Optionally, a list of urls pointing to optional caches, that are going
+      # to be tried first before hitting the upstream. This allows for chaining
+      # caches or build a mesh in order to more efficiently reduce downloads
+      upstream_caches: []
 ```
 
 The environment variables override the values of the configuration file and are
@@ -270,6 +283,31 @@ index-url = "<locaccel-url>:<pypi port>/simple"
 Or as environment variable:
 
 - `PIP_INDEX_URL=<locaccel-url>:<pypi port>/simple`
+
+#### Ruby Gems
+
+Set the following in your .gemrc:
+
+```
+---
+:sources:
+- <locaccel-url>:<rubygem port>
+- https://rubygems.org
+```
+
+Or run:
+
+```bash
+gem sources --add <locaccel-url>:<rubygem port>
+```
+
+###### Bundler
+
+If using bundler, you can put in `~/.bundle/config`:
+
+```
+bundle config mirror.https://rubygems.org <locaccel-url>:<rubygem port>
+```
 
 #### Apt (debian/ubuntu)
 
