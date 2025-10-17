@@ -41,6 +41,12 @@ type Proxy struct {
 	UpstreamCaches   []SerializableURL `yaml:"upstream_caches"`
 }
 
+type RubyGemRegistry struct {
+	Upstream       string
+	Port           uint16
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
+}
+
 type Log struct {
 	Level  string
 	Format string
@@ -70,17 +76,18 @@ func (c Cache) GetQuotaHigh() (units.Bytes, error) {
 }
 
 type Config struct {
-	Host            string
-	Cache           Cache
-	AdminInterface  string `yaml:"admin_interface"`
-	EnableMetrics   bool   `yaml:"metrics"`
-	EnableProfiling bool   `yaml:"profiling"`
-	Log             Log
-	GoProxies       []GoProxy      `yaml:"go_proxies"`
-	NpmRegistries   []NpmRegistry  `yaml:"npm_registries"`
-	OciRegistries   []OciRegistry  `yaml:"oci_registries"`
-	PyPIRegistries  []PyPIRegistry `yaml:"pypi_registries"`
-	Proxies         []Proxy
+	Host              string
+	Cache             Cache
+	AdminInterface    string `yaml:"admin_interface"`
+	EnableMetrics     bool   `yaml:"metrics"`
+	EnableProfiling   bool   `yaml:"profiling"`
+	Log               Log
+	GoProxies         []GoProxy      `yaml:"go_proxies"`
+	NpmRegistries     []NpmRegistry  `yaml:"npm_registries"`
+	OciRegistries     []OciRegistry  `yaml:"oci_registries"`
+	PyPIRegistries    []PyPIRegistry `yaml:"pypi_registries"`
+	Proxies           []Proxy
+	RubyGemRegistries []RubyGemRegistry `yaml:"rubygem_registries"`
 }
 
 func getBaseConfig(envLookup func(string) (string, bool)) *Config {
@@ -146,6 +153,9 @@ func Default(envLookup func(string) (string, bool)) *Config {
 		3142,
 		nil,
 	}}
+	conf.RubyGemRegistries = []RubyGemRegistry{
+		{"https://rubygems.org", 3146, nil},
+	}
 
 	applyOverrides(conf, envLookup)
 	return conf

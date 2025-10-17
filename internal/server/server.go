@@ -23,6 +23,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
 	"github.com/benjaminschubert/locaccel/internal/handlers/proxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/pypi"
+	"github.com/benjaminschubert/locaccel/internal/handlers/rubygem"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
 )
@@ -79,6 +80,13 @@ func New(
 
 	for _, proxy := range conf.Proxies {
 		srv.servers = append(srv.servers, setupProxy(conf, proxy, client, logger, metricsRegistry))
+	}
+
+	for _, registry := range conf.RubyGemRegistries {
+		srv.servers = append(
+			srv.servers,
+			setupRubyGemRegistry(conf, registry, client, logger, metricsRegistry),
+		)
 	}
 
 	if conf.AdminInterface != "" {
@@ -265,6 +273,33 @@ func setupProxy(
 		serviceName,
 		&log,
 		registry,
+	)
+}
+
+func setupRubyGemRegistry(
+	conf *config.Config,
+	registry config.RubyGemRegistry,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+	metricsRegistry prometheus.Registerer,
+) serverInfo {
+	serviceName := "rubygem[" + registry.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
+
+	handler := http.NewServeMux()
+	rubygem.RegisterHandler(
+		registry.Upstream,
+		handler,
+		client,
+		asURLs(registry.UpstreamCaches),
+	)
+
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, registry.Port),
+		handler,
+		serviceName,
+		&log,
+		metricsRegistry,
 	)
 }
 

@@ -226,4 +226,6 @@ func Execute(t *testing.T, name string, arg ...string) {
 		output,
 	)
 	require.NoError(t, err, "Command '%s' failed:\n-----\n%s\n-----", displayCmd, output)
+
+	t.Logf("-----\ncommand '%s' ran successfully:\n%s\n-----", displayCmd, output)
 }
