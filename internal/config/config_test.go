@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -46,7 +47,7 @@ pypi_registries:
 		),
 	)
 
-	conf, err := config.Parse(configFile)
+	conf, err := config.Parse(configFile, func(s string) (string, bool) { return "", false })
 	require.NoError(t, err)
 	require.Equal(
 		t,
@@ -73,6 +74,119 @@ pypi_registries:
 			},
 			PyPIRegistries: []config.PyPIRegistry{
 				{Upstream: "https://pypi.org", CDN: "https://files.pythonhosted.org", Port: 1235},
+			},
+		},
+		conf,
+	)
+}
+
+func TestCanGetQuotaLow(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf.Cache.Path = dir
+	conf.Cache.QuotaLow = units.NewDiskQuotaInBytes(units.Bytes{Bytes: 100})
+
+	quota, err := conf.Cache.GetQuotaLow()
+	require.NoError(t, err)
+	require.Equal(t, units.Bytes{Bytes: 100}, quota)
+}
+
+func TestCanGetQuotaHigh(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf.Cache.Path = dir
+	conf.Cache.QuotaHigh = units.NewDiskQuotaInBytes(units.Bytes{Bytes: 100})
+
+	quota, err := conf.Cache.GetQuotaHigh()
+	require.NoError(t, err)
+	require.Equal(t, units.Bytes{Bytes: 100}, quota)
+}
+
+func TestGetQuotaReportsProblemOnCachePathInvalid(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	require.NoError(t, os.Chmod(dir, 0o500)) //nolint:gosec
+
+	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf.Cache.Path = dir + "/cache"
+
+	quota, err := conf.Cache.GetQuotaHigh()
+	require.ErrorIs(t, err, fs.ErrPermission)
+	require.Equal(t, units.Bytes{}, quota)
+}
+
+func TestReportsCannotReadConfig(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Parse("nonexistent", func(s string) (string, bool) { return "", false })
+	require.ErrorIs(t, err, fs.ErrNotExist)
+}
+
+func TestCanSetOverridesViaEnvironment(t *testing.T) {
+	t.Parallel()
+
+	conf := config.Default(func(envvar string) (string, bool) {
+		switch envvar {
+		case "LOCACCEL_ENABLE_PROFILING":
+			return "1", true
+		case "LOCACCEL_LOG_LEVEL":
+			return "debug", true
+		case "LOCACCEL_LOG_FORMAT":
+			return "console", true
+		case "LOCACCEL_CACHE_PATH":
+			return "cache", true
+		case "LOCACCEL_HOST":
+			return "0.0.0.0", true
+		case "LOCACCEL_ADMIN_INTERFACE":
+			return "0.0.0.0:1000", true
+		default:
+			return "", false
+		}
+	})
+
+	require.Equal(
+		t,
+		&config.Config{
+			Host: "0.0.0.0",
+			Cache: config.Cache{
+				Path:      "cache",
+				Private:   false,
+				QuotaLow:  units.NewDiskQuotaInPercent(10),
+				QuotaHigh: units.NewDiskQuotaInPercent(20),
+			},
+			AdminInterface:  "0.0.0.0:1000",
+			EnableMetrics:   true,
+			EnableProfiling: true,
+			Log:             config.Log{Level: "debug", Format: "console"},
+			GoProxies:       []config.GoProxy{{Upstream: "https://proxy.golang.org", Port: 3143}},
+			NpmRegistries: []config.NpmRegistry{
+				{Upstream: "https://registry.npmjs.org/", Scheme: "http", Port: 3144},
+			},
+			OciRegistries: []config.OciRegistry{
+				{Upstream: "https://registry-1.docker.io", Port: 3131},
+				{Upstream: "https://gcr.io", Port: 3132},
+				{Upstream: "https://quay.io", Port: 3133},
+				{Upstream: "https://ghcr.io", Port: 3134},
+			},
+			PyPIRegistries: []config.PyPIRegistry{
+				{Upstream: "https://pypi.org/", CDN: "https://files.pythonhosted.org", Port: 3145},
+			},
+			Proxies: []config.Proxy{
+				{
+					AllowedUpstreams: []string{
+						"deb.debian.org",
+						"archive.ubuntu.com",
+						"security.ubuntu.com",
+					},
+					Port: 3142,
+				},
 			},
 		},
 		conf,
