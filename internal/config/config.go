@@ -53,20 +53,20 @@ type Cache struct {
 	QuotaHigh units.DiskQuota `yaml:"quota_high"`
 }
 
-func (c Cache) GetQuotaLow() (units.Bytes, error) {
-	err := os.MkdirAll(c.Path, 0o750)
+func getQuota(path string, quota units.DiskQuota) (units.Bytes, error) {
+	err := os.MkdirAll(path, 0o750)
 	if err != nil {
 		return units.Bytes{}, err
 	}
-	return c.QuotaLow.Bytes(c.Path)
+	return quota.Bytes(path)
+}
+
+func (c Cache) GetQuotaLow() (units.Bytes, error) {
+	return getQuota(c.Path, c.QuotaLow)
 }
 
 func (c Cache) GetQuotaHigh() (units.Bytes, error) {
-	err := os.MkdirAll(c.Path, 0o750)
-	if err != nil {
-		return units.Bytes{}, err
-	}
-	return c.QuotaHigh.Bytes(c.Path)
+	return getQuota(c.Path, c.QuotaHigh)
 }
 
 type Config struct {
@@ -83,8 +83,8 @@ type Config struct {
 	Proxies         []Proxy
 }
 
-func getBaseConfig() *Config {
-	defaultCachePath, ok := os.LookupEnv("LOCACCEL_DEFAULT_CACHE_PATH")
+func getBaseConfig(envLookup func(string) (string, bool)) *Config {
+	defaultCachePath, ok := envLookup("LOCACCEL_DEFAULT_CACHE_PATH")
 	if !ok {
 		defaultCachePath = "_cache/"
 	}
@@ -103,8 +103,8 @@ func getBaseConfig() *Config {
 	}
 }
 
-func Parse(configPath string) (*Config, error) {
-	c := getBaseConfig()
+func Parse(configPath string, envLookup func(string) (string, bool)) (*Config, error) {
+	c := getBaseConfig(envLookup)
 
 	fp, err := os.Open(configPath) //nolint:gosec
 	if err != nil {
@@ -115,12 +115,12 @@ func Parse(configPath string) (*Config, error) {
 	decoder.KnownFields(true)
 	err = decoder.Decode(&c)
 
-	applyOverrides(c)
+	applyOverrides(c, envLookup)
 	return c, err
 }
 
-func Default() *Config {
-	conf := getBaseConfig()
+func Default(envLookup func(string) (string, bool)) *Config {
+	conf := getBaseConfig(envLookup)
 	conf.GoProxies = []GoProxy{
 		{"https://proxy.golang.org", 3143, nil},
 	}
@@ -147,32 +147,32 @@ func Default() *Config {
 		nil,
 	}}
 
-	applyOverrides(conf)
+	applyOverrides(conf, envLookup)
 	return conf
 }
 
-func applyOverrides(conf *Config) {
-	if os.Getenv("LOCACCEL_ENABLE_PROFILING") == "1" {
+func applyOverrides(conf *Config, envLookup func(string) (string, bool)) {
+	if val, ok := envLookup("LOCACCEL_ENABLE_PROFILING"); ok && val == "1" {
 		conf.EnableProfiling = true
 	}
 
-	if val, ok := os.LookupEnv("LOCACCEL_LOG_LEVEL"); ok {
+	if val, ok := envLookup("LOCACCEL_LOG_LEVEL"); ok {
 		conf.Log.Level = val
 	}
 
-	if val, ok := os.LookupEnv("LOCACCEL_LOG_FORMAT"); ok {
+	if val, ok := envLookup("LOCACCEL_LOG_FORMAT"); ok {
 		conf.Log.Format = val
 	}
 
-	if val, ok := os.LookupEnv("LOCACCEL_CACHE_PATH"); ok {
+	if val, ok := envLookup("LOCACCEL_CACHE_PATH"); ok {
 		conf.Cache.Path = val
 	}
 
-	if val, ok := os.LookupEnv("LOCACCEL_HOST"); ok {
+	if val, ok := envLookup("LOCACCEL_HOST"); ok {
 		conf.Host = val
 	}
 
-	if val, ok := os.LookupEnv("LOCACCEL_ADMIN_INTERFACE"); ok {
+	if val, ok := envLookup("LOCACCEL_ADMIN_INTERFACE"); ok {
 		conf.AdminInterface = val
 	}
 }
