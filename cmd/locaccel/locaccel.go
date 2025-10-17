@@ -40,12 +40,12 @@ func main() {
 		}
 	}
 
-	conf, err := config.Parse(configPath)
+	conf, err := config.Parse(configPath, os.LookupEnv)
 	if err != nil {
 		if configPathSet {
 			panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
 		}
-		conf = config.Default()
+		conf = config.Default(os.LookupEnv)
 	}
 
 	logLevel, err := zerolog.ParseLevel(conf.Log.Level)
