@@ -34,8 +34,9 @@ func getFreshnessLifetime(
 			date, err := http.ParseTime(headers.Get("Date"))
 			if err != nil {
 				logger.Error().Err(err).Msg("BUG: Date header is in an invalid format, which should not happen")
+			} else {
+				return expiry.Sub(date)
 			}
-			return expiry.Sub(date)
 		}
 	}
 
@@ -49,7 +50,6 @@ func getFreshnessLifetime(
 				return date.Sub(modified) / 10
 			}
 			logger.Error().Err(err).Msg("BUG: Date header is in an invalid format, which should not happen")
-
 		}
 	}
 	return 0
@@ -74,7 +74,6 @@ func GetEstimatedResponseCreation(
 				Err(err).
 				Str("age", headers.Get("Age")).
 				Msg("response has an invalid Age header")
-			age = 0
 		}
 	}
 
@@ -83,7 +82,7 @@ func GetEstimatedResponseCreation(
 		logger.Error().
 			Err(err).
 			Msg("BUG: Date header is in an invalid format, which should not happen")
-		date = time.Time{}
+		date = time.Now().UTC()
 	}
 
 	apparentAge := max(0, responseTime.Sub(date))
