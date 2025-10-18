@@ -44,8 +44,9 @@ func TestInstallGoPackages(t *testing.T) {
 				"--workdir=/src",
 				"docker.io/golang:alpine",
 				"go",
-				"get",
-				"./...",
+				"mod",
+				"download",
+				"-x",
 			)
 		},
 		true,
