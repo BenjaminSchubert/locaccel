@@ -28,49 +28,6 @@ func writeTemplate(t *testing.T, name, templateString, destination string, data 
 	require.NoError(t, tmpl.Execute(file, data))
 }
 
-func preparePodmanIsolation(t *testing.T, workdir, serverURL, registryName string) []string {
-	t.Helper()
-
-	require.NoError(t, os.MkdirAll(workdir, 0o750))
-
-	registriesConf := path.Join(workdir, "registries.conf")
-	storageConf := path.Join(workdir, "storage.conf")
-	dataPath := path.Join(workdir, "data")
-
-	uri, err := url.Parse(serverURL)
-	require.NoError(t, err)
-	writeTemplate(
-		t,
-		"podman-registries.conf",
-		`[[registry]]
-prefix="{{.registry}}"
-location="{{.location}}"
-insecure = true`,
-		registriesConf,
-		map[string]string{"registry": registryName, "location": uri.Host},
-	)
-
-	// And the storage configuration
-	writeTemplate(
-		t,
-		"podman-storage.conf",
-		`[storage]
-rootless_storage_path="{{.}}"`,
-		storageConf,
-		dataPath,
-	)
-
-	t.Cleanup(func() {
-		testutils.Execute(t, "podman", "unshare", "rm", "-rf", dataPath)
-	})
-
-	return []string{
-		"CONTAINERS_REGISTRIES_CONF=" + registriesConf,
-		"CONTAINERS_STORAGE_CONF=" + storageConf,
-		"PATH=" + os.Getenv("PATH"),
-	}
-}
-
 func TestDownloadImageWithPodman(t *testing.T) {
 	t.Parallel()
 
@@ -96,11 +53,34 @@ func TestDownloadImageWithPodman(t *testing.T) {
 				func(t *testing.T, serverURL string) {
 					t.Helper()
 
-					// Generate the registry configuration
-					env := preparePodmanIsolation(
-						t, path.Join(t.TempDir(), "podman"), serverURL, testcase.registry)
+					registriesConf := path.Join(t.TempDir(), "registries.conf")
+					uri, err := url.Parse(serverURL)
+					require.NoError(t, err)
+					writeTemplate(
+						t,
+						"podman-registries.conf",
+						`[[registry]]
+				prefix="{{.registry}}"
+				location="{{.location}}"
+				insecure = true`,
+						registriesConf,
+						map[string]string{"registry": testcase.registry, "location": uri.Host},
+					)
 
-					testutils.ExecuteWithEnv(t, "podman", []string{"pull", testcase.image}, env)
+					testutils.Execute(
+						t,
+						"podman",
+						"run",
+						"--rm",
+						"--interactive",
+						"--network=host",
+						"--volume="+registriesConf+":/etc/containers/registries.conf:z,ro",
+						"quay.io/podman/stable",
+						"podman",
+						"--debug",
+						"pull",
+						testcase.image,
+					)
 				},
 				false,
 			)
