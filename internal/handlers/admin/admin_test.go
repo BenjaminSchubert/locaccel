@@ -37,7 +37,14 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 		assert.NoError(t, cache.Close())
 	})
 
-	require.NoError(t, admin.RegisterHandler(handler, cache, config.Default()))
+	require.NoError(
+		t,
+		admin.RegisterHandler(
+			handler,
+			cache,
+			config.Default(func(s string) (string, bool) { return "", false }),
+		),
+	)
 	server := httptest.NewServer(
 		middleware.ApplyAllMiddlewares(handler, "admin", logger, prometheus.NewPedanticRegistry()),
 	)

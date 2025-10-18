@@ -2,6 +2,9 @@ package units_test
 
 import (
 	"bytes"
+	"fmt"
+	"math"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +22,17 @@ func TestCanConvertFromYaml(t *testing.T) {
 	err := decoder.Decode(&b)
 	require.NoError(t, err)
 	require.Equal(t, units.Bytes{10}, b)
+}
+
+func TestReportsErrorIfInvalidFromYaml(t *testing.T) {
+	t.Parallel()
+
+	b := units.Bytes{}
+	decoder := yaml.NewDecoder(bytes.NewBufferString("hello"))
+
+	err := decoder.Decode(&b)
+	require.ErrorIs(t, units.ErrInvalidByteFormat, err)
+	require.Equal(t, units.Bytes{0}, b)
 }
 
 func TestCanDecode(t *testing.T) {
@@ -47,6 +61,20 @@ func TestCanDecode(t *testing.T) {
 			res, err := units.DecodeBytes(tc.val)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, res)
+		})
+	}
+}
+
+func TestReportsErrorOnTooHighBytes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []string{"", "TB"} {
+		t.Run(fmt.Sprintf("unit='%s'", tc), func(t *testing.T) {
+			t.Parallel()
+
+			res, err := units.DecodeBytes(fmt.Sprintf("1%f %s", math.MaxFloat64, tc))
+			require.ErrorIs(t, err, strconv.ErrRange)
+			require.Equal(t, units.Bytes{0}, res)
 		})
 	}
 }

@@ -211,6 +211,7 @@ func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, arg...)
+	cmd.Env = env
 
 	output, err := cmd.CombinedOutput()
 	displayCmd := strings.Join(append([]string{name}, arg...), " ")

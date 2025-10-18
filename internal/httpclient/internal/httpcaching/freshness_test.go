@@ -44,6 +44,21 @@ func TestGetFreshness(t *testing.T) {
 			3600,
 		},
 		{
+			"default-if-invalid-expires",
+			http.Header{
+				"Expires": []string{"hi"},
+			},
+			0,
+		},
+		{
+			"default-if-invalid-date",
+			http.Header{
+				"Expires": []string{"Sun, 01 Jan 2012 00:00:00 GMT"},
+				"Date":    []string{"hi"},
+			},
+			0,
+		},
+		{
 			"last-modified",
 			http.Header{
 				"Last-Modified": []string{"Sun, 01 Jan 2012 00:00:00 GMT"},
@@ -52,9 +67,17 @@ func TestGetFreshness(t *testing.T) {
 			3600,
 		},
 		{
-			"default-if-invalid-expires",
+			"default-if-invalid-last-modified",
 			http.Header{
-				"Expires": []string{"hi"},
+				"Last-Modified": []string{"hi"},
+			},
+			0,
+		},
+		{
+			"default-if-invalid-date-on-last-modified",
+			http.Header{
+				"Last-Modified": []string{"Sun, 01 Jan 2012 00:00:00 GMT"},
+				"Date":          []string{"hi"},
 			},
 			0,
 		},
@@ -93,6 +116,46 @@ func TestGetCurrentAge(t *testing.T) {
 
 	age := GetCurrentAge(estimatedResponseCreation)
 	require.Equal(t, time.Second*time.Duration(120), age)
+}
+
+func TestGetCurrentAgeHandlesInvalidAgeValues(t *testing.T) {
+	t.Parallel()
+
+	estimatedResponseCreation := GetEstimatedResponseCreation(
+		http.Header{
+			"Age":  []string{"hi"},
+			"Date": []string{time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
+		},
+		time.Now().Add(-time.Second*40),
+		time.Now().Add(-time.Second*30),
+		testutils.TestLogger(t),
+	)
+
+	require.Equal(
+		t,
+		time.Now().Add(-time.Second*120).Truncate(time.Second),
+		estimatedResponseCreation.Truncate(time.Second),
+	)
+}
+
+func TestGetCurrentAgeAssumeInvalidDateIsNowHeader(t *testing.T) {
+	t.Parallel()
+
+	estimatedResponseCreation := GetEstimatedResponseCreation(
+		http.Header{
+			"Age":  []string{"60"},
+			"Date": []string{"hi"},
+		},
+		time.Now().Add(-time.Second*40),
+		time.Now().Add(-time.Second*30),
+		testutils.TestLogger(t),
+	)
+
+	require.Equal(
+		t,
+		time.Now().Add(-time.Second*100).Truncate(time.Second),
+		estimatedResponseCreation.Truncate(time.Second),
+	)
 }
 
 func TestIsFresh(t *testing.T) {
