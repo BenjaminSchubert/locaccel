@@ -196,11 +196,6 @@ func RunIntegrationTestsForHandler(
 
 func Execute(t *testing.T, name string, arg ...string) {
 	t.Helper()
-	ExecuteWithEnv(t, name, arg, nil)
-}
-
-func ExecuteWithEnv(t *testing.T, name string, arg, env []string) {
-	t.Helper()
 
 	baseCtx := t.Context()
 	if t.Context().Err() != nil && errors.Is(t.Context().Err(), context.Canceled) {
