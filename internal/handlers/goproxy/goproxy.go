@@ -15,10 +15,12 @@ func RegisterHandler(
 	upstreamCaches []*url.URL,
 ) {
 	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
-	sumdbCaches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
-	for _, uri := range sumdbCaches.Uris {
-		uri.Path += "/sumdb/"
+	sumdbUpstreams := make([]*url.URL, 0, len(upstreamCaches))
+	for _, uri := range upstreamCaches {
+		u := *uri
+		u.Path = u.Path + "/sumdb/"
 	}
+	sumdbCaches := httpclient.UpstreamCache{Uris: sumdbUpstreams, Proxy: false}
 
 	handler.HandleFunc("GET /sumdb/", func(w http.ResponseWriter, r *http.Request) {
 		handlers.Forward(
