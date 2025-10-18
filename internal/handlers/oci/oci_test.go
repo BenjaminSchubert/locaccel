@@ -100,7 +100,12 @@ func TestDownloadImageWithPodman(t *testing.T) {
 					env := preparePodmanIsolation(
 						t, path.Join(t.TempDir(), "podman"), serverURL, testcase.registry)
 
-					testutils.ExecuteWithEnv(t, "podman", []string{"pull", testcase.image}, env)
+					testutils.ExecuteWithEnv(
+						t,
+						"podman",
+						[]string{"--debug", "pull", testcase.image},
+						env,
+					)
 				},
 				false,
 			)
