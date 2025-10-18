@@ -41,7 +41,6 @@ func TestInstallGoPackages(t *testing.T) {
 				"--env=GOPROXY="+serverURL,
 				"--env=GOSUMDB=sum.golang.org "+serverURL+"/sumdb",
 				"--volume="+path.Join(root, "go.mod")+":/src/go.mod:z,ro",
-				"--volume="+path.Join(root, "go.sum")+":/src/go.sum:z,ro",
 				"--workdir=/src",
 				"docker.io/golang:alpine",
 				"go",
