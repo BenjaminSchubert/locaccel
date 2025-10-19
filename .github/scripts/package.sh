@@ -21,6 +21,8 @@ for target in "${TARGETS[@]}"; do
     echo "Packaging for ${GOOS}/${GOARCH} in ${OUT_DIR}"
     # Build
     CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -trimpath -ldflags="-s -w" -o "$OUT_PATH" ./cmd/locaccel
+    go version -m "${OUT_PATH}" | grep vcs
+
     # Include license
     cp LICENSE README.md "${OUT_DIR}"
     cp integrations/systemd-locaccel.service "${OUT_DIR}/locaccel.service"

@@ -12,6 +12,7 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           filter: tree:0
+          ref: ${{ github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v6
