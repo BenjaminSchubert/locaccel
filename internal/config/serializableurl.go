@@ -26,3 +26,7 @@ func (s *SerializableURL) UnmarshalYAML(node *yaml.Node) error {
 	s.URL = parsed
 	return nil
 }
+
+func (s SerializableURL) MarshalYAML() (any, error) {
+	return s.URL.String(), nil
+}
