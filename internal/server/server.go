@@ -160,7 +160,13 @@ func setupGoProxy(
 	log := logger.With().Str("service", serviceName).Logger()
 
 	handler := http.NewServeMux()
-	goproxy.RegisterHandler(goProxy.Upstream, handler, client, asURLs(goProxy.UpstreamCaches))
+	goproxy.RegisterHandler(
+		goProxy.Upstream,
+		goProxy.SumDBURL,
+		handler,
+		client,
+		asURLs(goProxy.UpstreamCaches),
+	)
 
 	return createServer(
 		fmt.Sprintf("%s:%d", conf.Host, goProxy.Port),

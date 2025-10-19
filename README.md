@@ -168,6 +168,8 @@ profiling: false
 go_proxies:
       # The upstream Golang module proxy
     - upstream: https://proxy.golang.org
+      # The path where the sumdb can be found
+      sumdb_url: https://sum.golang.org/
       # The port on which to expose the cache locally
       port: 3143
       # Optionally, a list of urls pointing to optional caches, that are going

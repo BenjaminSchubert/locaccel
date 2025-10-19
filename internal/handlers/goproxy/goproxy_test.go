@@ -21,7 +21,13 @@ func TestInstallGoPackages(t *testing.T) {
 		t,
 		"go",
 		func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL) {
-			goproxy.RegisterHandler("https://proxy.golang.org", handler, client, upstreamCaches)
+			goproxy.RegisterHandler(
+				"https://proxy.golang.org",
+				"https://sum.golang.org",
+				handler,
+				client,
+				upstreamCaches,
+			)
 		},
 		func(t *testing.T, serverURL string) {
 			t.Helper()

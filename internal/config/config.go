@@ -11,6 +11,7 @@ import (
 
 type GoProxy struct {
 	Upstream       string
+	SumDBURL       string `yaml:"sumdb_url"`
 	Port           uint16
 	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
 }
@@ -129,7 +130,7 @@ func Parse(configPath string, envLookup func(string) (string, bool)) (*Config, e
 func Default(envLookup func(string) (string, bool)) *Config {
 	conf := getBaseConfig(envLookup)
 	conf.GoProxies = []GoProxy{
-		{"https://proxy.golang.org", 3143, nil},
+		{"https://proxy.golang.org", "https://sum.golang.org/", 3143, nil},
 	}
 	conf.OciRegistries = []OciRegistry{
 		{"https://registry-1.docker.io", 3131, nil},

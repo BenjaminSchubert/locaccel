@@ -165,7 +165,13 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			EnableMetrics:   true,
 			EnableProfiling: true,
 			Log:             config.Log{Level: "debug", Format: "console"},
-			GoProxies:       []config.GoProxy{{Upstream: "https://proxy.golang.org", Port: 3143}},
+			GoProxies: []config.GoProxy{
+				{
+					Upstream: "https://proxy.golang.org",
+					SumDBURL: "https://sum.golang.org/",
+					Port:     3143,
+				},
+			},
 			NpmRegistries: []config.NpmRegistry{
 				{Upstream: "https://registry.npmjs.org/", Scheme: "http", Port: 3144},
 			},

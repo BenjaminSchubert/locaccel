@@ -10,10 +10,15 @@ import (
 
 func RegisterHandler(
 	upstream string,
+	sumdb string,
 	handler *http.ServeMux,
 	client *httpclient.Client,
 	upstreamCaches []*url.URL,
 ) {
+	if sumdb[len(sumdb)-1] != '/' {
+		sumdb += "/"
+	}
+
 	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
 	sumdbUpstreams := make([]*url.URL, 0, len(upstreamCaches))
 	for _, uri := range upstreamCaches {
@@ -26,7 +31,7 @@ func RegisterHandler(
 		handlers.Forward(
 			w,
 			r,
-			"https://sum.golang.org/"+r.URL.RequestURI()[7:],
+			sumdb+r.URL.RequestURI()[7:],
 			client,
 			func(body []byte, resp *http.Response) ([]byte, error) {
 				return body, nil
