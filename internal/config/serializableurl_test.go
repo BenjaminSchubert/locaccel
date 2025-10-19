@@ -39,3 +39,13 @@ func TestReportErrorIfInvalidURLProvided(t *testing.T) {
 	err := decoder.Decode(&s)
 	require.ErrorContains(t, err, "missing protocol scheme")
 }
+
+func TestCanConvertToYaml(t *testing.T) {
+	t.Parallel()
+
+	buf := bytes.NewBufferString("")
+	s := config.SerializableURL{&url.URL{Scheme: "https", Host: "locaccel.test"}}
+	err := yaml.NewEncoder(buf).Encode(s)
+	require.NoError(t, err)
+	require.Equal(t, "https://locaccel.test\n", buf.String())
+}
