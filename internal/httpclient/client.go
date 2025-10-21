@@ -15,7 +15,6 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/database"
-	"github.com/benjaminschubert/locaccel/internal/filecache"
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
@@ -33,8 +32,7 @@ var (
 
 type Client struct {
 	client    *http.Client
-	db        *database.Database[CachedResponses, *CachedResponses]
-	cache     *filecache.FileCache
+	cache     *Cache
 	isPrivate bool
 	notify    func(r *http.Request, status string)
 	now       func() time.Time
@@ -71,7 +69,7 @@ func New(
 
 		return proxy.(*url.URL), nil
 	}
-	return &Client{client, cache.db, cache.cache, isPrivate, notify, now, since}
+	return &Client{client, cache, isPrivate, notify, now, since}
 }
 
 func buildKey(req *http.Request) []byte {
@@ -205,7 +203,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		}
 	}()
 
-	if err := c.db.Get(cacheKey, dbEntry); err == nil {
+	if err := c.cache.Get(cacheKey, dbEntry); err == nil {
 		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
 			logger.Debug().Msg("serving response from cache")
@@ -488,9 +486,9 @@ func (c *Client) setupIngestion(
 				if !match {
 					dbEntry.Value = append(dbEntry.Value, cacheResp)
 				}
-				err = c.db.Save(cacheKey, dbEntry)
+				err = c.cache.Save(cacheKey, dbEntry)
 			} else {
-				err = c.db.New(cacheKey, CachedResponses{cacheResp})
+				err = c.cache.New(cacheKey, CachedResponses{cacheResp})
 			}
 
 			if err != nil {
@@ -575,7 +573,7 @@ func (c *Client) refreshResponseAndServe(
 
 	resp.Header = cachedResp.Headers
 
-	if err := c.db.Save(cacheKey, dbEntry); err != nil {
+	if err := c.cache.Save(cacheKey, dbEntry); err != nil {
 		logger.Error().Err(err).Msg("Error updating the entry in the cache")
 	}
 

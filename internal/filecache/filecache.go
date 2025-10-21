@@ -323,3 +323,7 @@ func (f *FileCache) GetAllHashes() ([]string, error) {
 
 	return hashes, nil
 }
+
+func (f *FileCache) Delete(hash string, logger *zerolog.Logger) error {
+	return os.Remove(path.Join(f.root, hash[:2], hash[2:]))
+}
