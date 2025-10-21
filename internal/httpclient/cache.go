@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/url"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +29,8 @@ type CacheStatistics struct {
 		Size    units.Bytes
 	}
 }
+
+type CacheList map[string]map[string]CachedResponses
 
 type Cache struct {
 	db         *database.Database[CachedResponses, *CachedResponses]
@@ -137,6 +140,50 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 	return CacheStatistics{
 		dbTotalSize, dbEntries, fileCacheTotalSize, fileCacheEntries, usagePerHostname,
 	}, nil
+}
+
+func (c *Cache) List(ctx context.Context, hostname, logId string) (CacheList, error) {
+	list := make(CacheList)
+
+	err := c.db.Iterate(ctx,
+		func(key string, responses *database.Entry[CachedResponses]) error {
+			uri, err := url.Parse(key)
+			if err != nil {
+				return err
+			}
+
+			if uri.Hostname() != hostname {
+				return nil
+			}
+
+			method, path, _ := strings.Cut(key, "+")
+			if list[path] == nil {
+				list[path] = make(map[string]CachedResponses, 1)
+			}
+			list[path][method] = responses.Value
+			return nil
+		},
+		logId,
+	)
+	return list, err
+}
+
+func (c *Cache) Remove(key string, logger *zerolog.Logger) error {
+	entry, err := c.db.Get(key)
+	if err != nil {
+		return err
+	}
+	if err := c.db.Delete(key, entry); err != nil {
+		return err
+	}
+
+	for _, resp := range entry.Value {
+		if fErr := c.cache.Delete(resp.ContentHash, logger); fErr != nil {
+			err = fErr
+		}
+	}
+
+	return err
 }
 
 func (c *Cache) CleanupOldEntries(logId string) {

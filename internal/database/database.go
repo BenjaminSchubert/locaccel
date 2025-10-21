@@ -141,7 +141,7 @@ func (d *Database[T, TPtr]) Delete(key string, entry *Entry[T]) error {
 			return err
 		}
 
-		if item.Version() != entry.version {
+		if entry != nil && item.Version() != entry.version {
 			return ErrConflict
 		}
 

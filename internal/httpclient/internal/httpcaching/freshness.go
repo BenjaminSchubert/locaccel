@@ -82,7 +82,7 @@ func GetEstimatedResponseCreation(
 		logger.Error().
 			Err(err).
 			Msg("BUG: Date header is in an invalid format, which should not happen")
-		date = time.Now().UTC()
+		date = time.Now().UTC().Truncate(time.Second)
 	}
 
 	apparentAge := max(0, responseTime.Sub(date))
