@@ -1,0 +1,53 @@
+<!Doctype html>
+<html lang="en">
+    <meta charset="utf-8">
+    <title>Locaccel Admin - Cached entries</title>
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css">
+
+    <body>
+        <h1>Locaccel Admin - Cached entries for {{ .Hostname }}</h1>
+
+        <section>
+            <table id="cacheEntries">
+                <thead>
+                    <th></th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Vary</th>
+                    <th>Created At</th>
+                    <th>Status</th>
+                    <th>Headers</th>
+                </thead>
+                <tbody>
+                {{ range $path, $byMethod := .Entries }}
+                {{ range $method, $responses := $byMethod }}
+                {{ range $resp := $responses }}
+                    <tr data-id="{{ $method }}+{{ $path }}">
+                        <td><button class="deleteButton" title="Prune the entry from the cache">❌</button></td>
+                        <td>{{ $method }}</td>
+                        <td>{{ $path }}</td>
+                        <td>
+                        {{ if ne (len $resp.VaryHeaders) 0 }}
+                        {{ range $header, $value := $resp.VaryHeaders }}
+                        {{ $header }}: {{ join $value ", " }}<br />
+                        {{ end }}
+                        {{ end }}
+                        </td>
+                        <td>{{ $resp.TimeAtResponseCreation.Format "2006 Jan 02 15:04:05" }}</td>
+                        <td>{{ $resp.StatusCode }}</td>
+                        <td>
+                        {{ range $header, $value := $resp.Headers }}
+                        {{ $header }}: {{ join $value ", " }}<br />
+                        {{ end }}
+                        </td>
+                    </tr>
+                {{ end }}
+                {{ end }}
+                {{ end }}
+                </tbody>
+            </table>
+        </section>
+
+        <script src="/static/js/list.js" defer ></script>
+    </body>
+</html>

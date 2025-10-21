@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +30,8 @@ type CacheStatistics struct {
 		Size    units.Bytes
 	}
 }
+
+type CacheList map[string]map[string]CachedResponses
 
 type Cache struct {
 	db         *database.Database[CachedResponses, *CachedResponses]
@@ -137,6 +141,81 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 	return CacheStatistics{
 		dbTotalSize, dbEntries, fileCacheTotalSize, fileCacheEntries, usagePerHostname,
 	}, nil
+}
+
+func (c *Cache) New(key []byte, value CachedResponses) error {
+	return c.db.New(key, value)
+}
+
+func (c *Cache) Save(key []byte, entry *database.Entry[CachedResponses]) error {
+	return c.db.Save(key, entry)
+}
+
+func (c *Cache) Get(key []byte, entry *database.Entry[CachedResponses]) error {
+	return c.db.Get(key, entry)
+}
+
+func (c *Cache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, error) {
+	return c.cache.Open(hash, logger)
+}
+
+func (c *Cache) SetupIngestion(
+	src io.ReadCloser,
+	onIngest func(hash string),
+	onCleanup func(),
+	logger *zerolog.Logger,
+) io.ReadCloser {
+	return c.cache.SetupIngestion(src, onIngest, onCleanup, logger)
+}
+
+func (c *Cache) List(ctx context.Context, hostname, logId string) (CacheList, error) {
+	list := make(CacheList)
+
+	err := c.db.Iterate(ctx,
+		func(key []byte, responses *database.Entry[CachedResponses]) error {
+			k := string(key)
+			uri, err := url.Parse(k)
+			if err != nil {
+				return err
+			}
+
+			if uri.Hostname() != hostname {
+				return nil
+			}
+
+			method, path, _ := strings.Cut(k, "+")
+			if list[path] == nil {
+				list[path] = make(map[string]CachedResponses, 1)
+			}
+			list[path][method] = responses.Value
+			return nil
+		},
+		logId,
+	)
+	return list, err
+}
+
+func (c *Cache) Remove(key []byte, logger *zerolog.Logger) error {
+	entry := new(database.Entry[CachedResponses])
+	if err := c.db.Get(key, entry); err != nil {
+		return err
+	}
+	if err := c.db.Delete(key, entry); err != nil {
+		return err
+	}
+
+	var err error
+	for _, resp := range entry.Value {
+		if fErr := c.cache.Delete(resp.ContentHash, logger); fErr != nil {
+			if errors.Is(fErr, fs.ErrNotExist) {
+				logger.Warn().Str("file", resp.ContentHash).Msg("Hash was not found in cache")
+				continue
+			}
+			err = fErr
+		}
+	}
+
+	return err
 }
 
 func (c *Cache) CleanupOldEntries(logId string) {

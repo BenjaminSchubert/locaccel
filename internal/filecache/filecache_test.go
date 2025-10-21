@@ -22,14 +22,28 @@ var errTest = errors.New("testerror")
 
 const testData = "1234567890"
 
-func ingest(t *testing.T, cache *filecache.FileCache, content string, logger *zerolog.Logger) {
+func ingest(
+	t *testing.T,
+	cache *filecache.FileCache,
+	content string,
+	logger *zerolog.Logger,
+) string {
 	t.Helper()
 
+	var hash string
+
 	buf := bytes.NewBufferString(content)
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
+	reader := cache.SetupIngestion(
+		io.NopCloser(buf),
+		func(h string) { hash = h },
+		func() {},
+		logger,
+	)
 	_, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
+
+	return hash
 }
 
 func TestCanIngestAndRecover(t *testing.T) {
@@ -303,4 +317,17 @@ func BenchmarkFileIngestion(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestCanDelete(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
+	require.NoError(t, err)
+
+	hash := ingest(t, cache, "one", logger)
+
+	err = cache.Delete(hash, logger)
+	require.NoError(t, err)
 }
