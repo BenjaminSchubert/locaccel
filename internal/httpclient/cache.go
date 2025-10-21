@@ -179,6 +179,10 @@ func (c *Cache) Remove(key string, logger *zerolog.Logger) error {
 
 	for _, resp := range entry.Value {
 		if fErr := c.cache.Delete(resp.ContentHash, logger); fErr != nil {
+			if errors.Is(fErr, fs.ErrNotExist) {
+				logger.Warn().Str("file", resp.ContentHash).Msg("Hash was not found in cache")
+				continue
+			}
 			err = fErr
 		}
 	}
