@@ -263,3 +263,16 @@ func TestCanGetAllHashes(t *testing.T) {
 		hashes,
 	)
 }
+
+func TestCanDelete(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
+	require.NoError(t, err)
+
+	hash := ingest(t, cache, "one", logger)
+
+	err = cache.Delete(hash, logger)
+	require.NoError(t, err)
+}
