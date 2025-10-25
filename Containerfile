@@ -15,6 +15,7 @@ RUN \
 FROM scratch
 
 COPY --from=build /build/locaccel /locaccel
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY LICENSE /LICENSE
 ENV LOCACCEL_DEFAULT_CACHE_PATH=/cache
 ENTRYPOINT [ "/locaccel" ]
