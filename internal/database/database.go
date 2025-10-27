@@ -67,11 +67,11 @@ func (d *Database[T, TPtr]) Close() error {
 	return nil
 }
 
-func (d *Database[T, TPtr]) Get(key string) (*Entry[T], error) {
+func (d *Database[T, TPtr]) Get(key []byte) (*Entry[T], error) {
 	var entry Entry[T]
 
 	err := d.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
+		item, err := txn.Get(key)
 		if err != nil {
 			if errors.Is(err, ErrKeyNotFound) {
 				return ErrKeyNotFound
@@ -100,7 +100,7 @@ func (d *Database[T, TPtr]) Get(key string) (*Entry[T], error) {
 	return &entry, nil
 }
 
-func (d *Database[T, TPtr]) Save(key string, entry *Entry[T]) error {
+func (d *Database[T, TPtr]) Save(key []byte, entry *Entry[T]) error {
 	data, err := entry.Value.MarshalMsg(nil)
 	if err != nil {
 		return fmt.Errorf(
@@ -110,7 +110,7 @@ func (d *Database[T, TPtr]) Save(key string, entry *Entry[T]) error {
 	}
 
 	err = d.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
+		item, err := txn.Get(key)
 		if err != nil {
 			if !errors.Is(err, badger.ErrKeyNotFound) {
 				return fmt.Errorf("unable to check for previous entry with same key: %w", err)
@@ -119,7 +119,7 @@ func (d *Database[T, TPtr]) Save(key string, entry *Entry[T]) error {
 			return ErrConflict
 		}
 
-		return txn.Set([]byte(key), data)
+		return txn.Set(key, data)
 	})
 	if err != nil {
 		return fmt.Errorf("unable to save entry in database: %w", err)
@@ -127,13 +127,13 @@ func (d *Database[T, TPtr]) Save(key string, entry *Entry[T]) error {
 	return nil
 }
 
-func (d *Database[T, TPtr]) New(key string, value T) error {
+func (d *Database[T, TPtr]) New(key []byte, value T) error {
 	return d.Save(key, &Entry[T]{Value: value})
 }
 
-func (d *Database[T, TPtr]) Delete(key string, entry *Entry[T]) error {
+func (d *Database[T, TPtr]) Delete(key []byte, entry *Entry[T]) error {
 	err := d.db.Update(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte(key))
+		item, err := txn.Get(key)
 		if err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
 				return nil // all good, nothing to remove
@@ -145,7 +145,7 @@ func (d *Database[T, TPtr]) Delete(key string, entry *Entry[T]) error {
 			return ErrConflict
 		}
 
-		return txn.Delete([]byte(key))
+		return txn.Delete(key)
 	})
 	if err != nil {
 		return fmt.Errorf("unable to delete entry from database: %w", err)
@@ -172,7 +172,7 @@ func (d *Database[T, TPtr]) GetStatistics() (count int64, totalSize units.Bytes,
 
 func (d *Database[T, TPtr]) Iterate(
 	ctx context.Context,
-	apply func(key string, value *Entry[T]) error,
+	apply func(key []byte, value *Entry[T]) error,
 	logId string,
 ) error {
 	stream := d.db.NewStream()
@@ -189,7 +189,7 @@ func (d *Database[T, TPtr]) Iterate(
 			if err != nil {
 				return err
 			}
-			err = apply(string(kv.Key), &Entry[T]{val, kv.Version})
+			err = apply(kv.Key, &Entry[T]{val, kv.Version})
 			if err != nil {
 				return err
 			}
