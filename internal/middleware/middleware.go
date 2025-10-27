@@ -79,6 +79,10 @@ func newMetricsMiddleware(
 	handlerName string,
 	registry prometheus.Registerer,
 ) http.Handler {
+	if registry == nil {
+		return next
+	}
+
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"handler": handlerName}, registry)
 
 	requestsTotal := promauto.With(reg).NewCounterVec(

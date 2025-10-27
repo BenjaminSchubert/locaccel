@@ -96,11 +96,14 @@ func main() {
 		}
 	}()
 
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(
-		collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-	)
+	var registry *prometheus.Registry
+	if conf.EnableMetrics {
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(
+			collectors.NewGoCollector(),
+			collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		)
+	}
 
 	cachingClient := httpclient.New(
 		client,
