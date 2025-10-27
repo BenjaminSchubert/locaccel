@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -80,4 +81,50 @@ func TestProxyForbidsByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func BenchmarkProxy(b *testing.B) {
+	logger := zerolog.New(zerolog.NewTestWriter(b)).Level(zerolog.WarnLevel)
+
+	handler := &http.ServeMux{}
+	proxy.RegisterHandler(
+		[]string{"deb.debian.org"},
+		handler,
+		testutils.NewClient(b, &logger),
+		nil,
+	)
+
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(
+			handler,
+			"proxy",
+			&logger,
+			nil,
+		),
+	)
+	b.Cleanup(server.Close)
+
+	download := func() {
+		testutils.Execute(
+			b,
+			"podman",
+			"run",
+			"--rm",
+			"--interactive",
+			"--network=host",
+			"--dns=127.0.0.127",
+			"--env=http_proxy="+server.URL,
+			"debian:stable-slim",
+			"bash",
+			"-c",
+			"apt-get update && apt-get install --download-only --assume-yes gnome",
+		)
+	}
+
+	download()
+
+	b.ResetTimer()
+	for b.Loop() {
+		download()
+	}
 }
