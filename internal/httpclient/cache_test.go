@@ -38,8 +38,8 @@ func validateCache(
 	entriesInDB := make(map[string]CachedResponses, len(expected))
 	err := cache.db.Iterate(
 		t.Context(),
-		func(key string, value *database.Entry[CachedResponses]) error {
-			entriesInDB[key] = value.Value
+		func(key []byte, value *database.Entry[CachedResponses]) error {
+			entriesInDB[string(key)] = value.Value
 			return nil
 		},
 		"test",
@@ -81,7 +81,7 @@ func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Cloc
 		responses[i].ContentHash = ingest(t, cache, d)
 	}
 
-	require.NoError(t, cache.db.New(key, responses))
+	require.NoError(t, cache.db.New([]byte(key), responses))
 }
 
 func TestCanGetStatisticsOnEmptyCache(t *testing.T) {

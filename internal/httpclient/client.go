@@ -64,8 +64,8 @@ func New(
 	return &Client{client, cache.db, cache.cache, isPrivate, notify, now, since}
 }
 
-func buildKey(req *http.Request) string {
-	return req.Method + "+" + req.URL.String()
+func buildKey(req *http.Request) []byte {
+	return []byte(req.Method + "+" + req.URL.String())
 }
 
 func (c *Client) selectResponseCandidates(
@@ -429,7 +429,7 @@ func (c *Client) setupIngestion(
 	req *http.Request,
 	resp *http.Response,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
-	cacheKey string,
+	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
 	logger *zerolog.Logger,
 ) io.ReadCloser {
@@ -470,7 +470,7 @@ func (c *Client) setupIngestion(
 }
 
 func (c *Client) updateCache(
-	cacheKey string,
+	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
 	resp *http.Response,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
@@ -516,7 +516,7 @@ func (c *Client) updateCache(
 }
 
 func (c *Client) refreshResponseAndServe(
-	cacheKey string,
+	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
 	idx int,
 	resp *http.Response,

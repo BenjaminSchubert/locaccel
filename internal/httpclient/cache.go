@@ -104,8 +104,8 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 	}{}
 
 	err = c.db.Iterate(ctx,
-		func(key string, responses *database.Entry[CachedResponses]) error {
-			uri, err := url.Parse(key)
+		func(key []byte, responses *database.Entry[CachedResponses]) error {
+			uri, err := url.Parse(string(key))
 			if err != nil {
 				return err
 			}
@@ -182,7 +182,7 @@ func (c *Cache) CleanupOldEntries(logId string) {
 func (c *Cache) removeUnusedDatabaseEntries(knownHashes map[string]bool, logId string) error {
 	return c.db.Iterate(
 		context.Background(),
-		func(key string, value *database.Entry[CachedResponses]) error {
+		func(key []byte, value *database.Entry[CachedResponses]) error {
 			hasMissing := false
 
 			for _, resp := range value.Value {
@@ -202,7 +202,7 @@ func (c *Cache) removeUnusedDatabaseEntries(knownHashes map[string]bool, logId s
 	)
 }
 
-func (c *Cache) pruneDatabaseEntry(key string, value *database.Entry[CachedResponses]) error {
+func (c *Cache) pruneDatabaseEntry(key []byte, value *database.Entry[CachedResponses]) error {
 	validValues := make(CachedResponses, 0)
 	for _, resp := range value.Value {
 		_, err := c.cache.Stat(resp.ContentHash)
