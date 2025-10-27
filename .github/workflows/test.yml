@@ -7,7 +7,7 @@ on:
         required: true
 
 jobs:
-  test:
+  benchmark:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -20,8 +20,43 @@ jobs:
       - name: Generate code
         run: go generate ./...
 
-      - name: Test
-        run: go run gotest.tools/gotestsum@latest --hide-summary=all --junitfile=junit.xml --format=testname -- -race -coverpkg=./... -coverprofile .coverage ./...
+      - name: Run benchmarks for proxy
+        run: go test -benchtime=10x -benchmem -run=^$ -bench=^.*$ ./internal/handlers/proxy | tee benchmark_proxy.txt
+
+      - name: Generate summary
+        run: |
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## Benchmarks
+
+          \`\`\`
+          $(cat benchmark_proxy.txt)
+          \`\`\`
+          EOF
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: benchmarks
+          path: benchmark_proxy.txt
+          if-no-files-found: error
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Download gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
+      - name: Generate code
+        run: go generate ./...
+
+      - name: Run tests
+        run: gotestsum --hide-summary=all --junitfile=junit.xml --format=testname -- -race -coverpkg=./... -coverprofile .coverage ./...
 
       - name: Remove ascii colors from junit report
         if: ${{ !cancelled() }}

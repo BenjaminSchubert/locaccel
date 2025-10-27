@@ -36,18 +36,18 @@ func (o *OfflineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return nil, ErrUnableToContactUpstream
 }
 
-func NewClient(t *testing.T, logger *zerolog.Logger) *httpclient.Client {
-	t.Helper()
+func NewClient(tb testing.TB, logger *zerolog.Logger) *httpclient.Client {
+	tb.Helper()
 
-	client, _ := NewClientWithUnderlyingClient(t, logger)
+	client, _ := NewClientWithUnderlyingClient(tb, logger)
 	return client
 }
 
 func NewClientWithUnderlyingClient(
-	t *testing.T,
+	tb testing.TB,
 	logger *zerolog.Logger,
 ) (cachingClient *httpclient.Client, httpClient *http.Client) {
-	t.Helper()
+	tb.Helper()
 
 	client := &http.Client{
 		Timeout: time.Minute,
@@ -63,14 +63,14 @@ func NewClientWithUnderlyingClient(
 	}
 
 	cache, err := httpclient.NewCache(
-		path.Join(t.TempDir(), "cache"),
-		units.Bytes{Bytes: 10 * 1024 * 1024},
+		path.Join(tb.TempDir(), "cache"),
 		units.Bytes{Bytes: 100 * 1024 * 1024},
+		units.Bytes{Bytes: 1000 * 1024 * 1024},
 		logger,
 	)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		assert.NoError(t, cache.Close())
+	require.NoError(tb, err)
+	tb.Cleanup(func() {
+		assert.NoError(tb, cache.Close())
 	})
 
 	return httpclient.New(
@@ -194,15 +194,15 @@ func RunIntegrationTestsForHandler(
 	})
 }
 
-func Execute(t *testing.T, name string, arg ...string) {
-	t.Helper()
+func Execute(tb testing.TB, name string, arg ...string) {
+	tb.Helper()
 
-	baseCtx := t.Context()
-	if t.Context().Err() != nil && errors.Is(t.Context().Err(), context.Canceled) {
+	baseCtx := tb.Context()
+	if tb.Context().Err() != nil && errors.Is(tb.Context().Err(), context.Canceled) {
 		baseCtx = context.Background()
 	}
 
-	ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(baseCtx, 5*time.Minute)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, name, arg...)
@@ -210,22 +210,20 @@ func Execute(t *testing.T, name string, arg ...string) {
 	output, err := cmd.CombinedOutput()
 	displayCmd := strings.Join(append([]string{name}, arg...), " ")
 	require.NotErrorIs(
-		t,
+		tb,
 		err,
 		context.DeadlineExceeded,
-		"command '%s' timed out after 2m:\n-----\n%s\n-----",
+		"command '%s' timed out after 5m:\n-----\n%s\n-----",
 		displayCmd,
 		output,
 	)
 	require.NotErrorIs(
-		t,
+		tb,
 		ctx.Err(),
 		context.DeadlineExceeded,
-		"command '%s' timed out after 2m:\n-----\n%s\n-----",
+		"command '%s' timed out after 5m:\n-----\n%s\n-----",
 		displayCmd,
 		output,
 	)
-	require.NoError(t, err, "Command '%s' failed:\n-----\n%s\n-----", displayCmd, output)
-
-	t.Logf("-----\ncommand '%s' ran successfully:\n%s\n-----", displayCmd, output)
+	require.NoError(tb, err, "Command '%s' failed:\n-----\n%s\n-----", displayCmd, output)
 }
