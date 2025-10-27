@@ -2,6 +2,7 @@ package filecache_test
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"io"
 	"io/fs"
@@ -262,4 +263,33 @@ func TestCanGetAllHashes(t *testing.T) {
 		},
 		hashes,
 	)
+}
+
+func BenchmarkFileIngestion(b *testing.B) {
+	for _, size := range []string{"10KiB", "100KiB", "1MiB", "10MiB", "100MiB", "1GiB"} {
+		b.Run(size, func(b *testing.B) {
+			sizeB, err := units.DecodeBytes(size)
+			require.NoError(b, err)
+
+			logger := testutils.TestLogger(b)
+			cache, err := filecache.NewFileCache(b.TempDir(), 100, 1000, logger)
+			require.NoError(b, err)
+
+			data := make([]byte, sizeB.Bytes)
+			n, err := rand.Read(data)
+			require.NoError(b, err)
+			require.Equal(b, sizeB.Bytes, int64(n))
+
+			buf := bytes.NewReader(data)
+
+			b.ResetTimer()
+			for b.Loop() {
+				r := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+				n, err := io.Copy(io.Discard, r)
+				require.NoError(b, err)
+				require.Equal(b, sizeB.Bytes, n)
+				buf.Reset(data)
+			}
+		})
+	}
 }
