@@ -69,6 +69,7 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	reader := cache.cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(content)),
 		func(h string) { hash = h },
+		func() {},
 		cache.logger,
 	)
 	_, err := io.ReadAll(reader)

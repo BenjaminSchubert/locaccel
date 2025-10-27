@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -19,7 +20,16 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
 
-var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
+var (
+	errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
+	cachedResponsesPool       = sync.Pool{
+		New: func() any {
+			r := new(database.Entry[CachedResponses])
+			r.Value = make(CachedResponses, 0, 1)
+			return r
+		},
+	}
+)
 
 type Client struct {
 	client    *http.Client
@@ -148,10 +158,11 @@ func (c *Client) serveFromCachedCandidates(
 				continue
 			}
 
-			resp.Headers.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
+			headers := resp.Headers.Clone()
+			headers.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 			return &http.Response{
 				Body:       body,
-				Header:     resp.Headers,
+				Header:     headers,
 				StatusCode: resp.StatusCode,
 			}
 		}
@@ -186,9 +197,15 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	cacheKey := buildKey(req)
+	dbEntry := cachedResponsesPool.Get().(*database.Entry[CachedResponses])
+	releaseDBEntry := true
+	defer func() {
+		if releaseDBEntry {
+			cachedResponsesPool.Put(dbEntry)
+		}
+	}()
 
-	dbEntry, err := c.db.Get(cacheKey)
-	if err == nil {
+	if err := c.db.Get(cacheKey, dbEntry); err == nil {
 		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
 			logger.Debug().Msg("serving response from cache")
@@ -203,7 +220,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	wasOriginalRequestConditional := false
 	originalRequest := req.Clone(req.Context())
 
-	if dbEntry != nil {
+	if dbEntry.Version() != 0 {
 		hasConditionalInformation, wasOriginalRequestConditional = c.addConditionalRequestInformation(
 			req,
 			dbEntry,
@@ -218,7 +235,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		logger,
 	)
 	if err != nil || resp.StatusCode >= 500 {
-		if dbEntry != nil {
+		if dbEntry.Version() != 0 {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
 				logger.Warn().
 					Err(err).
@@ -261,7 +278,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 			logger,
 		)
 		if err != nil || resp.StatusCode >= 500 {
-			if dbEntry != nil {
+			if dbEntry.Version() != 0 {
 				if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
 					logger.Warn().
 						Err(err).
@@ -281,6 +298,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		return resp, nil
 	}
 
+	releaseDBEntry = false
 	resp.Body = c.setupIngestion(
 		req,
 		resp,
@@ -441,7 +459,7 @@ func (c *Client) setupIngestion(
 			cacheResp := CachedResponse{
 				hash,
 				resp.StatusCode,
-				resp.Header,
+				resp.Header.Clone(),
 				httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
 				httpcaching.GetEstimatedResponseCreation(
 					resp.Header,
@@ -452,7 +470,7 @@ func (c *Client) setupIngestion(
 				),
 			}
 
-			if dbEntry != nil {
+			if dbEntry.Version() != 0 {
 				match := false
 				// Do we match a vary headers and should replace it?
 				for idx := range dbEntry.Value {
@@ -481,6 +499,7 @@ func (c *Client) setupIngestion(
 				logger.Debug().Msg("request saved in the database")
 			}
 		},
+		func() { cachedResponsesPool.Put(dbEntry) },
 		logger,
 	)
 }

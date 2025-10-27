@@ -74,6 +74,7 @@ func NewFileCache(
 func (f *FileCache) SetupIngestion(
 	src io.ReadCloser,
 	onIngest func(hash string),
+	onCleanup func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
 	dest, err := os.CreateTemp(f.tmpdir, "ingest-XXX")
@@ -90,6 +91,7 @@ func (f *FileCache) SetupIngestion(
 		io.MultiWriter(dest, hasher),
 		func(totalread int, readErr, writeErr error) error {
 			defer hashPool.Put(hasher)
+			defer onCleanup()
 
 			if totalread > (int(f.quotaHigh) / 2) {
 				logger.Warn().Int("size", totalread).Msg("File is too big for the cache. Skipping")

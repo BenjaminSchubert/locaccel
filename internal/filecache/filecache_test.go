@@ -26,7 +26,7 @@ func ingest(t *testing.T, cache *filecache.FileCache, content string, logger *ze
 	t.Helper()
 
 	buf := bytes.NewBufferString(content)
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
 	_, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
@@ -44,6 +44,7 @@ func TestCanIngestAndRecover(t *testing.T) {
 	reader := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { computedHash = hash },
+		func() {},
 		logger,
 	)
 
@@ -81,11 +82,13 @@ func TestHandlesConcurrentWrites(t *testing.T) {
 	reader1 := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { hash1 = hash },
+		func() {},
 		logger,
 	)
 	reader2 := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
 		func(hash string) { hash2 = hash },
+		func() {},
 		logger,
 	)
 
@@ -115,6 +118,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	reader := cache.SetupIngestion(
 		io.NopCloser(iotest.ErrReader(errTest)),
 		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+		func() {},
 		logger,
 	)
 
@@ -136,6 +140,7 @@ func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
 	reader := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString("toolong")),
 		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+		func() {},
 		logger,
 	)
 
@@ -167,7 +172,12 @@ func TestCanStatFile(t *testing.T) {
 	var hash string
 
 	buf := bytes.NewBufferString("hello world!")
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(h string) { hash = h }, logger)
+	reader := cache.SetupIngestion(
+		io.NopCloser(buf),
+		func(h string) { hash = h },
+		func() {},
+		logger,
+	)
 	output, err := io.ReadAll(reader)
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
@@ -195,7 +205,7 @@ func TestCanGetStatistics(t *testing.T) {
 
 	// tmp should be ignored
 	buf := bytes.NewBufferString("six")
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
 	_, err = io.ReadAll(reader)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, reader.Close()) })
@@ -248,7 +258,7 @@ func TestCanGetAllHashes(t *testing.T) {
 
 	// tmp should be ignored
 	buf := bytes.NewBufferString("three")
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
 	_, err = io.ReadAll(reader)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, reader.Close()) })
@@ -284,7 +294,7 @@ func BenchmarkFileIngestion(b *testing.B) {
 
 			b.ResetTimer()
 			for b.Loop() {
-				r := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, logger)
+				r := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
 				n, err := io.Copy(io.Discard, r)
 				require.NoError(b, err)
 				require.Equal(b, sizeB.Bytes, n)
