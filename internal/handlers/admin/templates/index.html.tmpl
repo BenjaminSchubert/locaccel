@@ -2,7 +2,7 @@
 <html lang="en">
     <meta charset="utf-8">
     <title>Locaccel Admin</title>
-    <link rel="stylesheet" type="text/css" href="static/style.css">
+    <link rel="stylesheet" type="text/css" href="/static/css/style.css">
 
     <body>
         <h1>Locaccel Admin</h1>
@@ -48,7 +48,7 @@
                 <tbody>
                 {{ range $key, $info := .Stats.UsagePerHostName }}
                     <tr>
-                        <td>{{ $key }}</td>
+                        <td><a href="/hostname/{{ $key }}">{{ $key }}</a></td>
                         <td>{{ $info.Entries }}</td>
                         <td>{{ $info.Size }}</td>
                     </tr>
