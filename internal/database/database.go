@@ -42,6 +42,10 @@ type Entry[T any] struct {
 	version uint64
 }
 
+func (e *Entry[T]) Version() uint64 {
+	return e.version
+}
+
 type Database[T encodable, TPtr Ptr[T]] struct {
 	db *badger.DB
 }
@@ -67,13 +71,12 @@ func (d *Database[T, TPtr]) Close() error {
 	return nil
 }
 
-func (d *Database[T, TPtr]) Get(key []byte) (*Entry[T], error) {
-	var entry Entry[T]
-
+func (d *Database[T, TPtr]) Get(key []byte, entry *Entry[T]) error {
 	err := d.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
 			if errors.Is(err, ErrKeyNotFound) {
+				entry.version = 0
 				return ErrKeyNotFound
 			}
 			return fmt.Errorf("unexpected error loading key: %w", err)
@@ -81,8 +84,7 @@ func (d *Database[T, TPtr]) Get(key []byte) (*Entry[T], error) {
 
 		err = item.Value(func(val []byte) error {
 			entry.version = item.Version()
-			entry.Value, err = d.unmarshal(val)
-			return err
+			return d.unmarshal(val, &entry.Value)
 		})
 		if err != nil {
 			return fmt.Errorf("unexpected error extracting value: %w", err)
@@ -92,12 +94,12 @@ func (d *Database[T, TPtr]) Get(key []byte) (*Entry[T], error) {
 	})
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
-			return nil, ErrKeyNotFound
+			return ErrKeyNotFound
 		}
-		return nil, fmt.Errorf("unable to load key: %w", err)
+		return fmt.Errorf("unable to load key: %w", err)
 	}
 
-	return &entry, nil
+	return nil
 }
 
 func (d *Database[T, TPtr]) Save(key []byte, entry *Entry[T]) error {
@@ -185,11 +187,11 @@ func (d *Database[T, TPtr]) Iterate(
 		}
 
 		for _, kv := range list.Kv {
-			val, err := d.unmarshal(kv.Value)
-			if err != nil {
+			var val TPtr = new(T)
+			if err := d.unmarshal(kv.Value, val); err != nil {
 				return err
 			}
-			err = apply(kv.Key, &Entry[T]{val, kv.Version})
+			err = apply(kv.Key, &Entry[T]{*val, kv.Version})
 			if err != nil {
 				return err
 			}
@@ -200,16 +202,15 @@ func (d *Database[T, TPtr]) Iterate(
 	return stream.Orchestrate(ctx)
 }
 
-func (d *Database[T, TPtr]) unmarshal(val []byte) (T, error) {
-	var value TPtr = new(T)
+func (d *Database[T, TPtr]) unmarshal(val []byte, value TPtr) error {
 	if _, err := value.UnmarshalMsg(val); err != nil {
-		return *value, fmt.Errorf(
+		return fmt.Errorf(
 			"entry in the database is not of the correct format, this should not happen: %w",
 			err,
 		)
 	}
 
-	return *value, nil
+	return nil
 }
 
 func (d *Database[T, TPtr]) RunGarbageCollector() error {
