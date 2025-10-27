@@ -327,7 +327,7 @@ func setupAdminInterface(
 		log.Info().
 			Str("profilingUrl", conf.AdminInterface+"/-/pprof/").
 			Msg("Enabling profiling")
-		handlers.RegisterProfilingHandlers(handler, "/-/pprof/")
+		handlers.RegisterProfilingHandlers(handler, "GET /-/pprof/")
 	}
 
 	if conf.EnableMetrics {

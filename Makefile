@@ -25,7 +25,7 @@ fix: .cache/bin/golangci-lint generate
 	$< fmt
 
 test: generate
-	go test -race -coverprofile .coverage -short -coverpkg=./... ./...
+	go test -race -coverprofile .coverage -coverpkg=./... ./...
 	go tool cover -func .coverage
 
 gopls-check: generate
