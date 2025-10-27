@@ -25,7 +25,7 @@ jobs:
       - name: Package binary
         run: SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) ./.github/scripts/package.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: locaccel-packages
           path: dist/*
