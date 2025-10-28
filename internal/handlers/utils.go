@@ -16,15 +16,23 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
 
-var JSONHandlerPool = sync.Pool{
-	New: func() any {
-		buffer := new(bytes.Buffer)
-		decoder := json.NewDecoder(buffer)
-		decoder.DisallowUnknownFields()
-		encoder := json.NewEncoder(buffer)
-		return &JSONHandler{buffer, decoder, encoder}
-	},
-}
+var (
+	JSONHandlerPool = sync.Pool{
+		New: func() any {
+			buffer := new(bytes.Buffer)
+			decoder := json.NewDecoder(buffer)
+			decoder.DisallowUnknownFields()
+			encoder := json.NewEncoder(buffer)
+			return &JSONHandler{buffer, decoder, encoder}
+		},
+	}
+	bufferPool = sync.Pool{
+		New: func() any {
+			buffer := make([]byte, 1024*32)
+			return &buffer
+		},
+	}
+)
 
 type JSONHandler struct {
 	Buffer  *bytes.Buffer
@@ -82,7 +90,10 @@ func Forward(
 
 	w.WriteHeader(resp.StatusCode)
 
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	buf := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(buf)
+
+	if _, err := io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{resp.Body}, *buf); err != nil {
 		hlog.FromRequest(r).Panic().Err(err).Msg("Error sending response to client")
 	}
 }

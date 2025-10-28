@@ -100,14 +100,7 @@ func BenchmarkIntegrationProxy(b *testing.B) {
 		nil,
 	)
 
-	server := httptest.NewServer(
-		middleware.ApplyAllMiddlewares(
-			handler,
-			"proxy",
-			&logger,
-			nil,
-		),
-	)
+	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, "proxy", &logger, nil))
 	b.Cleanup(server.Close)
 
 	testutils.Execute(
