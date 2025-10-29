@@ -31,3 +31,115 @@ jobs:
       contents: read
       attestations: write
       packages: write
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base
+        if: ${{ github.base_ref }}
+        uses: actions/checkout@v5
+        with:
+          path: base/
+          ref: ${{ github.base_ref }}
+
+      - name: Checkout head
+        uses: actions/checkout@v5
+        with:
+          path: head/
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache-dependency-path: head/go.sum
+
+      - name: Generate code
+        run: |
+          set -eu
+
+          (cd head && go generate ./...)
+          if [ -d base ]; then
+            (cd base && go generate ./...)
+          fi
+
+      - name: Create benchmarks result directory
+        run: mkdir -p benchmarks/
+
+      - name: Run benchmarks against base
+        if: ${{ github.base_ref }}
+        run: |
+          set -eu
+          set -o pipefail
+
+          go test -count=10 -bench=. -run=^$ -benchmem -short ./... | tee ../benchmarks/base.txt
+          go test -count=10 --benchtime 10x -bench=^BenchmarkIntegration -run=^$ -benchmem ./... | tee --append ../benchmarks/base.txt
+        working-directory: base
+
+      - name: Run benchmarks against head
+        run: |
+          set -eu
+          set -o pipefail
+
+          go test -count=10 -bench=. -run=^$ -benchmem -short ./... | tee ../benchmarks/head.txt
+          go test -count=10 -benchtime 10x -bench=^BenchmarkIntegration -run=^$ -benchmem ./... | tee --append ../benchmarks/head.txt
+        working-directory: head
+
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
+      - name: Generate report
+        if: ${{ !github.base_ref }}
+        run: |
+          set -eu
+          benchstat head=benchmarks/head.txt | tee ./benchmarks/stats.txt
+
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## Benchmarks
+
+          ### Statistics
+
+          \`\`\`
+          $(cat benchmarks/stats.txt)
+          \`\`\`
+
+          ### Results
+
+          \`\`\`
+          $(cat benchmarks/head.txt | grep -v "^\s" | grep -v "^--- BENCH:")
+          \`\`\`
+          EOF
+
+      - name: Compare benchmarks
+        if: ${{ github.base_ref }}
+        run: |
+          set -eu
+          benchstat base=benchmarks/base.txt head=benchmarks/head.txt | tee ./benchmarks/diff.txt
+
+          cat << EOF >> $GITHUB_STEP_SUMMARY
+          ## Benchmarks
+
+          ### Difference
+
+          \`\`\`
+          $(cat benchmarks/diff.txt)
+          \`\`\`
+
+          ### Head
+
+          \`\`\`
+          $(cat benchmarks/head.txt | grep -v "^\s" | grep -v "^--- BENCH:")
+          \`\`\`
+
+          ### Base
+
+          \`\`\`
+          $(cat benchmarks/base.txt | grep -v "^\s" | grep -v "^--- BENCH:")
+          \`\`\`
+          EOF
+
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: benchmarks
+          path: benchmarks/*
+          if-no-files-found: error
