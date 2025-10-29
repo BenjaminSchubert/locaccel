@@ -108,6 +108,8 @@ func main() {
 		&logger,
 		conf.Cache.Private,
 		middleware.SetCacheState,
+		time.Now,
+		time.Since,
 	)
 
 	srv := server.New(conf, cachingClient, cache, &logger, registry)

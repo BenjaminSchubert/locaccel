@@ -27,6 +27,8 @@ type Client struct {
 	cache     *filecache.FileCache
 	isPrivate bool
 	notify    func(r *http.Request, status string)
+	now       func() time.Time
+	since     func(time.Time) time.Duration
 }
 
 type proxyCtx struct{}
@@ -42,6 +44,8 @@ func New(
 	logger *zerolog.Logger,
 	isPrivate bool,
 	notify func(r *http.Request, status string),
+	now func() time.Time,
+	since func(time.Time) time.Duration,
 ) *Client {
 	transport := client.Transport.(*http.Transport)
 	originalProxy := transport.Proxy
@@ -57,7 +61,7 @@ func New(
 
 		return proxy.(*url.URL), nil
 	}
-	return &Client{client, cache.db, cache.cache, isPrivate, notify}
+	return &Client{client, cache.db, cache.cache, isPrivate, notify, now, since}
 }
 
 func buildKey(req *http.Request) string {
@@ -135,6 +139,7 @@ func (c *Client) serveFromCachedCandidates(
 			cacheControl,
 			resp.TimeAtResponseCreation,
 			logger,
+			c.since,
 		)
 		if isFresh || forceStale {
 			body, err := c.cache.Open(resp.ContentHash, logger)
@@ -396,9 +401,9 @@ func (c *Client) forwardRequest(
 		Str("method", req.Method).
 		Msg("Sending request to upstream")
 
-	timeAtRequestCreated = time.Now().UTC()
+	timeAtRequestCreated = c.now().UTC()
 	resp, err = c.client.Do(req)
-	timeAtResponseReceived = time.Now().UTC()
+	timeAtResponseReceived = c.now().UTC()
 
 	if err != nil {
 		return resp, timeAtRequestCreated, timeAtResponseReceived, err
@@ -414,7 +419,7 @@ func (c *Client) forwardRequest(
 	// as per https://datatracker.ietf.org/doc/html/rfc9110#name-date
 	if _, err := http.ParseTime(resp.Header.Get("Date")); err != nil {
 		logger.Debug().Err(err).Msg("invalid Date header replaced")
-		resp.Header["Date"] = []string{time.Now().UTC().Format(http.TimeFormat)}
+		resp.Header["Date"] = []string{c.now().UTC().Format(http.TimeFormat)}
 	}
 
 	return resp, timeAtRequestCreated, timeAtResponseReceived, err
@@ -443,6 +448,7 @@ func (c *Client) setupIngestion(
 					timeAtRequestCreated,
 					timeAtResponseReceived,
 					logger,
+					c.now,
 				),
 			}
 
@@ -517,7 +523,7 @@ func (c *Client) refreshResponseAndServe(
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	logger *zerolog.Logger,
 ) *http.Response {
-	cachedResp := dbEntry.Value[idx]
+	cachedResp := &dbEntry.Value[idx]
 
 	for key, val := range resp.Header {
 		if key != "Content-Length" {
@@ -529,6 +535,7 @@ func (c *Client) refreshResponseAndServe(
 		timeAtRequestCreated,
 		timeAtResponseReceived,
 		logger,
+		c.now,
 	)
 
 	resp.Header = cachedResp.Headers
@@ -551,7 +558,7 @@ func (c *Client) refreshResponseAndServe(
 		Header:     cachedResp.Headers.Clone(),
 	}
 
-	age := httpcaching.GetCurrentAge(cachedResp.TimeAtResponseCreation)
+	age := httpcaching.GetCurrentAge(cachedResp.TimeAtResponseCreation, c.since)
 	r.Header.Set("Age", strconv.FormatFloat(age.Seconds(), 'f', 0, 64))
 
 	return r

@@ -59,6 +59,7 @@ func GetEstimatedResponseCreation(
 	headers http.Header,
 	requestTime, responseTime time.Time,
 	logger *zerolog.Logger,
+	now func() time.Time,
 ) time.Time {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.3
 	// This initial part computes the approximate date at which the response was
@@ -82,7 +83,7 @@ func GetEstimatedResponseCreation(
 		logger.Error().
 			Err(err).
 			Msg("BUG: Date header is in an invalid format, which should not happen")
-		date = time.Now().UTC()
+		date = now().UTC()
 	}
 
 	apparentAge := max(0, responseTime.Sub(date))
@@ -92,11 +93,14 @@ func GetEstimatedResponseCreation(
 	return responseTime.Add(-max(apparentAge, correctedAgeValue))
 }
 
-func GetCurrentAge(responseCreationTime time.Time) time.Duration {
+func GetCurrentAge(
+	responseCreationTime time.Time,
+	since func(t time.Time) time.Duration,
+) time.Duration {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2.3
 	// The responseCreationTime expects to be computed from the
 	// GetEstimatedResponseCreation function
-	return time.Since(responseCreationTime).Truncate(time.Second)
+	return since(responseCreationTime).Truncate(time.Second)
 }
 
 func IsFresh(
@@ -104,8 +108,9 @@ func IsFresh(
 	cacheControl CacheControlResponseDirective,
 	responseCreationTime time.Time,
 	logger *zerolog.Logger,
+	since func(t time.Time) time.Duration,
 ) (time.Duration, bool) {
 	// Implements https://datatracker.ietf.org/doc/html/rfc9111#section-4.2
-	age := GetCurrentAge(responseCreationTime)
+	age := GetCurrentAge(responseCreationTime, since)
 	return age, getFreshnessLifetime(headers, cacheControl, logger) > age
 }
