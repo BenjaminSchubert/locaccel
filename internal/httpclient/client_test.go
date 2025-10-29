@@ -20,19 +20,36 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
+type Clock struct {
+	current time.Time
+}
+
+func (c *Clock) Since(t time.Time) time.Duration {
+	return c.current.Sub(t)
+}
+
+func (c *Clock) Now() time.Time {
+	return c.current
+}
+
+func (c *Clock) Advance() {
+	c.current = c.current.Add(time.Second)
+}
+
 func setup(
 	t *testing.T,
-) (client *Client, valCache func(map[string]CachedResponses), valQueries func([]string)) {
+) (client *Client, clock *Clock, valCache func(map[string]CachedResponses), valQueries func([]string)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
 	logger := testutils.TestLogger(t)
+	testTime, err := time.Parse(time.RFC3339, "2024-01-01T12:13:14Z")
+	require.NoError(t, err)
+	clock = &Clock{testTime}
 
 	cache, err := NewCache(cachePath, units.Bytes{Bytes: 100}, units.Bytes{Bytes: 1000}, logger)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
-
-	currentTime := time.Now()
 
 	hits := []string{}
 
@@ -42,8 +59,12 @@ func setup(
 			logger,
 			false,
 			func(r *http.Request, status string) { hits = append(hits, status) },
-		), func(expected map[string]CachedResponses) {
-			validateCache(t, cache, expected, currentTime)
+			clock.Now,
+			clock.Since,
+		),
+		clock,
+		func(expected map[string]CachedResponses) {
+			validateCache(t, cache, expected)
 		},
 		func(expected []string) { assert.Equal(t, expected, hits) }
 }
@@ -77,7 +98,7 @@ func makeRequest(
 func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -98,7 +119,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 func TestClientDoesNotCachedErrors(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := setup(t)
 
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -119,7 +140,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "no-store")
@@ -139,10 +160,12 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 func TestClientCachesCacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "public")
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
 	}))
@@ -161,10 +184,12 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 					"Cache-Control":  []string{"public"},
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp.Header["Date"],
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -174,12 +199,14 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateQueries := setup(t)
+	client, clock, _, validateQueries := setup(t)
 
 	wasCalled := false
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.False(t, wasCalled, "The service did not serve the request from cache")
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "public, max-age=20")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -190,8 +217,6 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	// Initial Query
 	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
-	date := resp.Header["Date"]
-
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -200,7 +225,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 			"Cache-Control":  []string{"public, max-age=20"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 		},
 		resp.Header,
 	)
@@ -212,11 +237,11 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	assert.Equal(
 		t,
 		http.Header{
-			"Age":            []string{"0"},
+			"Age":            []string{"1"},
 			"Cache-Control":  []string{"public, max-age=20"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 		},
 		resp.Header,
 	)
@@ -227,13 +252,15 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateQueries := setup(t)
+	client, clock, _, validateQueries := setup(t)
 
 	wasCalled := false
-	lastModified := time.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
+	lastModified := clock.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.False(t, wasCalled, "The service did not serve the request from cache")
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Last-Modified", lastModified)
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -244,8 +271,6 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	// Initial Query
 	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
-	date := resp.Header["Date"]
-
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -253,7 +278,7 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 		http.Header{
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 			"Last-Modified":  []string{lastModified},
 		},
 		resp.Header,
@@ -263,18 +288,13 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
-
-	// Some tests can be slow, and this is annoying to test more precisely
-	if slices.Equal(resp.Header["Age"], []string{"1"}) {
-		resp.Header["Age"] = []string{"0"}
-	}
 	assert.Equal(
 		t,
 		http.Header{
-			"Age":            []string{"0"},
+			"Age":            []string{"1"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 			"Last-Modified":  []string{lastModified},
 		},
 		resp.Header,
@@ -286,11 +306,13 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	count := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count += 1
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "public, max-age=30")
 		w.Header().Add("Vary", "Count")
 		_, err := w.Write(fmt.Appendf(nil, "Hello %s!", r.Header.Get("Count")))
@@ -314,12 +336,12 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 			"Cache-Control":  []string{"public, max-age=30"},
 			"Content-Length": []string{"8"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
 			"Vary":           []string{"Count"},
 		}
 		if date == nil {
-			expectedHeader["Date"] = resp.Header["Date"]
+			expectedHeader["Date"] = []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)}
 		} else {
+			expectedHeader["Date"] = date
 			assert.NotNil(t, resp.Header["Age"])
 			expectedHeader["Age"] = resp.Header["Age"]
 		}
@@ -352,11 +374,13 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 					"Cache-Control":  []string{"public, max-age=30"},
 					"Content-Length": []string{"8"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp1.Header["Date"],
-					"Vary":           []string{"Count"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+					"Vary": []string{"Count"},
 				},
 				http.Header{"Count": []string{"1"}},
-				time.Time{},
+				clock.Now().Add(-2 * time.Second).Local(),
 			},
 			{
 				"bab02792998098aa075831b5c79424be14f4d50f316cf555d4d54250258dda6a",
@@ -365,11 +389,13 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 					"Cache-Control":  []string{"public, max-age=30"},
 					"Content-Length": []string{"8"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp1.Header["Date"],
-					"Vary":           []string{"Count"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+					"Vary": []string{"Count"},
 				},
 				http.Header{"Count": []string{"2"}},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -398,11 +424,13 @@ func TestValidationEtag(t *testing.T) {
 				originalEtag := getEtag(originalEtagType)
 				validationEtag := getEtag(validationEtagType)
 
-				client, validateCache, validateQueries := setup(t)
+				client, clock, validateCache, validateQueries := setup(t)
 
 				srv := httptest.NewServer(
 					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 						w.Header().Add("Cache-Control", "public, no-cache")
+						w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+						clock.Advance()
 
 						if slices.ContainsFunc(
 							r.Header["If-None-Match"],
@@ -438,8 +466,10 @@ func TestValidationEtag(t *testing.T) {
 						"Cache-Control":  []string{"public, no-cache"},
 						"Content-Length": []string{"6"},
 						"Content-Type":   []string{"text/plain; charset=utf-8"},
-						"Date":           resp1.Header["Date"],
-						"Etag":           []string{originalEtag},
+						"Date": []string{
+							clock.Now().Add(-time.Second).Format(http.TimeFormat),
+						},
+						"Etag": []string{originalEtag},
 					},
 					resp1.Header,
 				)
@@ -458,13 +488,15 @@ func TestValidationEtag(t *testing.T) {
 				assert.Equal(
 					t,
 					http.Header{
-						"Age":            []string{"0"},
+						"Age":            []string{"1"},
 						"Cache-Control":  []string{"public, no-cache"},
 						"Content-Length": []string{"6"},
 						"Content-Type":   []string{"text/plain; charset=utf-8"},
-						"Date":           resp2.Header["Date"],
-						"Etag":           []string{validationEtag},
-						"Stale":          []string{"1"},
+						"Date": []string{
+							clock.Now().Add(-time.Second).Format(http.TimeFormat),
+						},
+						"Etag":  []string{validationEtag},
+						"Stale": []string{"1"},
 					},
 					resp2.Header,
 				)
@@ -478,12 +510,14 @@ func TestValidationEtag(t *testing.T) {
 								"Cache-Control":  []string{"public, no-cache"},
 								"Content-Length": []string{"6"},
 								"Content-Type":   []string{"text/plain; charset=utf-8"},
-								"Date":           resp2.Header["Date"],
-								"Etag":           []string{validationEtag},
-								"Stale":          []string{"1"},
+								"Date": []string{
+									clock.Now().Add(-time.Second).Format(http.TimeFormat),
+								},
+								"Etag":  []string{validationEtag},
+								"Stale": []string{"1"},
 							},
 							http.Header{},
-							time.Time{},
+							clock.Now().Add(-time.Second).Local(),
 						},
 					},
 				})
@@ -496,12 +530,14 @@ func TestValidationEtag(t *testing.T) {
 
 func TestValidationLastModified(t *testing.T) {
 	t.Parallel()
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	lastModified := time.Now().UTC().Format(http.TimeFormat)
 
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+			clock.Advance()
 			w.Header().Add("Last-Modified", lastModified)
 
 			if slices.ContainsFunc(
@@ -535,7 +571,7 @@ func TestValidationLastModified(t *testing.T) {
 		http.Header{
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           resp1.Header["Date"],
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 			"Last-Modified":  []string{lastModified},
 		},
 		resp1.Header,
@@ -550,19 +586,15 @@ func TestValidationLastModified(t *testing.T) {
 		http.Header{},
 		nil,
 	)
-	// Some tests can be slow, and this is annoying to test more precisely
-	if slices.Equal(resp2.Header["Age"], []string{"1"}) {
-		resp2.Header["Age"] = []string{"0"}
-	}
 	assert.Equal(t, 200, resp2.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
 		t,
 		http.Header{
-			"Age":            []string{"0"},
+			"Age":            []string{"1"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           resp2.Header["Date"],
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 			"Last-Modified":  []string{lastModified},
 			"Stale":          []string{"1"},
 		},
@@ -577,12 +609,14 @@ func TestValidationLastModified(t *testing.T) {
 				http.Header{
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp2.Header["Date"],
-					"Last-Modified":  []string{lastModified},
-					"Stale":          []string{"1"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+					"Last-Modified": []string{lastModified},
+					"Stale":         []string{"1"},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -593,7 +627,7 @@ func TestValidationLastModified(t *testing.T) {
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateQueries := setup(t)
+	client, clock, _, validateQueries := setup(t)
 
 	wasCalled := false
 
@@ -603,6 +637,8 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 			return
 		}
 
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "public, max-age=0")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -613,8 +649,6 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	// Initial Query
 	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 
-	date := resp.Header["Date"]
-
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 	assert.Equal(
@@ -623,7 +657,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 			"Cache-Control":  []string{"public, max-age=0"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 		},
 		resp.Header,
 	)
@@ -632,22 +666,19 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
-
-	// Some tests can be slow, and this is annoying to test more precisely
-	if slices.Equal(resp.Header["Age"], []string{"1"}) {
-		resp.Header["Age"] = []string{"0"}
-	}
 	assert.Equal(
 		t,
 		http.Header{
-			"Age":            []string{"0"},
+			"Age":            []string{"1"},
 			"Cache-Control":  []string{"public, max-age=0"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
 		},
 		resp.Header,
 	)
+
+	clock.Advance()
 
 	// Third Query, should still be served by the cache
 	srv.Close()
@@ -655,19 +686,14 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
-
-	// Some tests can be slow, and this is annoying to test more precisely
-	if slices.Equal(resp.Header["Age"], []string{"1"}) {
-		resp.Header["Age"] = []string{"0"}
-	}
 	assert.Equal(
 		t,
 		http.Header{
-			"Age":            []string{"0"},
+			"Age":            []string{"2"},
 			"Cache-Control":  []string{"public, max-age=0"},
 			"Content-Length": []string{"6"},
 			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           date,
+			"Date":           []string{clock.Now().Add(-2 * time.Second).Format(http.TimeFormat)},
 		},
 		resp.Header,
 	)
@@ -678,9 +704,11 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "public")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -710,10 +738,12 @@ func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 					"Cache-Control":  []string{"public"},
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp.Header["Date"],
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -723,9 +753,11 @@ func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "public")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
@@ -755,10 +787,12 @@ func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 					"Cache-Control":  []string{"public"},
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp.Header["Date"],
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -769,12 +803,14 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 	// Some Services don't implement http caching properly, e.g. ghcr.io
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 	count := 0
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count += 1
 		w.Header().Add("Cache-Control", "public")
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		if r.Header.Get("If-None-Match") != "" {
 			w.WriteHeader(http.StatusNotModified)
 			return
@@ -818,11 +854,13 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 					"Cache-Control":  []string{"public"},
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp.Header["Date"],
-					"Etag":           []string{"123"},
+					"Date": []string{
+						clock.Now().Add(-3 * time.Second).Format(http.TimeFormat),
+					},
+					"Etag": []string{"123"},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-3 * time.Second).Local(),
 			},
 			{
 				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
@@ -831,11 +869,13 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 					"Cache-Control":  []string{"public"},
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp2.Header["Date"],
-					"Etag":           []string{"123"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+					"Etag": []string{"123"},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-time.Second).Local(),
 			},
 		},
 	})
@@ -846,7 +886,7 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 	t.Parallel()
 
-	client, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := setup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var matches []string
@@ -854,6 +894,8 @@ func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 			matches = strings.Split(ifNoneMatch[0], ", ")
 		}
 
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
 		w.Header().Add("Cache-Control", "must-revalidate")
 		if slices.Contains(matches, "etag-match") {
 			w.Header().Add("Etag", "etag-match")
@@ -889,12 +931,14 @@ func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 				http.Header{
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date":           resp.Header["Date"],
-					"Etag":           []string{"no-match"},
-					"Cache-Control":  []string{"must-revalidate"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+					"Etag":          []string{"no-match"},
+					"Cache-Control": []string{"must-revalidate"},
 				},
 				http.Header{},
-				time.Time{},
+				clock.Now().Add(-2 * time.Second).Local(),
 			},
 		},
 	})
@@ -990,7 +1034,15 @@ func TestClientAddsConditionalQueriesInformation(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { assert.NoError(t, cache.Close()) })
 
-			c := New(&http.Client{Transport: &http.Transport{}}, cache, logger, true, nil)
+			c := New(
+				&http.Client{Transport: &http.Transport{}},
+				cache,
+				logger,
+				true,
+				nil,
+				time.Now,
+				time.Since,
+			)
 
 			req := &http.Request{Header: tc.incomingHeaders}
 			hasConditional, wasConditional := c.addConditionalRequestInformation(

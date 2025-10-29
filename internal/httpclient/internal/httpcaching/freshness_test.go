@@ -107,6 +107,7 @@ func TestGetCurrentAge(t *testing.T) {
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),
+		time.Now,
 	)
 	require.Equal(
 		t,
@@ -114,7 +115,7 @@ func TestGetCurrentAge(t *testing.T) {
 		estimatedResponseCreation.Truncate(time.Second),
 	)
 
-	age := GetCurrentAge(estimatedResponseCreation)
+	age := GetCurrentAge(estimatedResponseCreation, time.Since)
 	require.Equal(t, time.Second*time.Duration(120), age)
 }
 
@@ -129,6 +130,7 @@ func TestGetCurrentAgeHandlesInvalidAgeValues(t *testing.T) {
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),
+		time.Now,
 	)
 
 	require.Equal(
@@ -149,6 +151,7 @@ func TestGetCurrentAgeAssumeInvalidDateIsNowHeader(t *testing.T) {
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
 		testutils.TestLogger(t),
+		time.Now,
 	)
 
 	require.Equal(
@@ -171,6 +174,7 @@ func TestIsFresh(t *testing.T) {
 		CacheControlResponseDirective{SMaxAge: 300 * time.Second},
 		time.Now().Add(-time.Second*120),
 		testutils.TestLogger(t),
+		time.Since,
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.True(t, isFresh)
@@ -189,6 +193,7 @@ func TestIsNotFresh(t *testing.T) {
 		CacheControlResponseDirective{SMaxAge: 30 * time.Second},
 		time.Now().Add(-time.Second*120),
 		testutils.TestLogger(t),
+		time.Since,
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.False(t, isFresh)

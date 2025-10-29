@@ -79,6 +79,8 @@ func NewClientWithUnderlyingClient(
 		logger,
 		false,
 		func(r *http.Request, status string) {},
+		time.Now,
+		time.Since,
 	), client
 }
 

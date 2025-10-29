@@ -21,7 +21,6 @@ func validateCache(
 	t *testing.T,
 	cache *Cache,
 	expected map[string]CachedResponses,
-	startTime time.Time,
 ) {
 	t.Helper()
 
@@ -40,15 +39,6 @@ func validateCache(
 	err := cache.db.Iterate(
 		t.Context(),
 		func(key string, value *database.Entry[CachedResponses]) error {
-			for i := range value.Value {
-				assert.GreaterOrEqual(
-					t,
-					value.Value[i].TimeAtResponseCreation,
-					startTime.Truncate(time.Second),
-				)
-				value.Value[i].TimeAtResponseCreation = time.Time{}
-			}
-
 			entriesInDB[key] = value.Value
 			return nil
 		},
@@ -59,7 +49,7 @@ func validateCache(
 	hashes, err := cache.cache.GetAllHashes()
 	require.NoError(t, err)
 
-	assert.Equal(t, expected, entriesInDB)
+	assert.Equal(t, expected, entriesInDB, "Entries in the database are not what is expected")
 	assert.ElementsMatch(t, expectedHashes, hashes)
 }
 
@@ -80,12 +70,13 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	return hash
 }
 
-func addEntry(t *testing.T, cache *Cache, key string, data []string) {
+func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Clock) {
 	t.Helper()
 
 	responses := make(CachedResponses, len(data))
 	for i, d := range data {
-		responses[i].TimeAtResponseCreation = time.Now()
+		responses[i].TimeAtResponseCreation = clock.Now().Local()
+		clock.Advance()
 		responses[i].StatusCode = http.StatusOK
 		responses[i].ContentHash = ingest(t, cache, d)
 	}
@@ -116,6 +107,8 @@ func TestCanGetStatisticsOnEmptyCache(t *testing.T) {
 func TestCanGetStatistics(t *testing.T) {
 	t.Parallel()
 
+	clock := &Clock{}
+
 	cache, err := NewCache(
 		t.TempDir(),
 		units.Bytes{Bytes: 10},
@@ -125,24 +118,27 @@ func TestCanGetStatistics(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
-	addEntry(t, cache, "https://one.test/hello", []string{"one"})
+	addEntry(t, cache, "https://one.test/hello", []string{"one"}, clock)
 	addEntry(
 		t,
 		cache,
 		"https://two.test/hello",
 		[]string{"two", "two-two"},
+		clock,
 	)
 	addEntry(
 		t,
 		cache,
 		"https://three.test/hello",
 		[]string{"three"},
+		clock,
 	)
 	addEntry(
 		t,
 		cache,
 		"https://three.test/hi",
 		[]string{"three-two"},
+		clock,
 	)
 
 	stats, err := cache.GetStatistics(t.Context(), "test")
@@ -160,7 +156,7 @@ func TestCanGetStatistics(t *testing.T) {
 func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 	t.Parallel()
 
-	startTime := time.Now()
+	clock := &Clock{}
 
 	cache, err := NewCache(
 		t.TempDir(),
@@ -174,7 +170,7 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 	// Empty cache
 	cache.CleanupOldEntries("test")
 
-	addEntry(t, cache, "https://test.test", []string{"helloworld"})
+	addEntry(t, cache, "https://test.test", []string{"helloworld"}, clock)
 
 	// Under the limit
 	cache.CleanupOldEntries("test")
@@ -185,16 +181,16 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 			http.StatusOK,
 			http.Header{},
 			http.Header{},
-			time.Time{},
+			clock.Now().Add(-time.Second).Local(),
 		},
-	}}, startTime)
+	}})
 }
 
 func TestCanCleanOldEntries(t *testing.T) {
 	t.Parallel()
 
+	clock := &Clock{time.Now()}
 	cachePath := t.TempDir()
-	startTime := time.Now()
 
 	cache, err := NewCache(
 		cachePath,
@@ -205,9 +201,9 @@ func TestCanCleanOldEntries(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
-	addEntry(t, cache, "https://one.test", []string{"one"})
-	addEntry(t, cache, "https://two.test", []string{"two-one", "two-two"})
-	addEntry(t, cache, "https://three.test", []string{"three"})
+	addEntry(t, cache, "https://one.test", []string{"one"}, clock)
+	addEntry(t, cache, "https://two.test", []string{"two-one", "two-two"}, clock)
+	addEntry(t, cache, "https://three.test", []string{"three"}, clock)
 
 	require.NoError(
 		t,
@@ -217,8 +213,8 @@ func TestCanCleanOldEntries(t *testing.T) {
 				cachePath,
 				"cache/60/e077fe1f739faa929a30a4bb4440eb6d82cb2776e87252a5d533af247897e2",
 			),
-			time.Time{},
-			time.Now().Add(-time.Hour),
+			clock.Now(),
+			clock.Now().Add(-time.Minute),
 		),
 	)
 	require.NoError(
@@ -229,8 +225,8 @@ func TestCanCleanOldEntries(t *testing.T) {
 				cachePath,
 				"cache/db/ec0e689fb63bd729147727129d854e9d590ab620a18bbbcb3317d268d6fd72",
 			),
-			time.Time{},
-			time.Now().Add(-time.Minute),
+			clock.Now(),
+			clock.Now().Add(-time.Minute),
 		),
 	)
 
@@ -246,7 +242,7 @@ func TestCanCleanOldEntries(t *testing.T) {
 					http.StatusOK,
 					http.Header{},
 					http.Header{},
-					time.Time{},
+					clock.Now().Add(-4 * time.Second).Local(),
 				},
 			},
 			"https://two.test": {
@@ -255,10 +251,9 @@ func TestCanCleanOldEntries(t *testing.T) {
 					http.StatusOK,
 					http.Header{},
 					http.Header{},
-					time.Time{},
+					clock.Now().Add(-2 * time.Second).Local(),
 				},
 			},
 		},
-		startTime,
 	)
 }
