@@ -83,7 +83,11 @@ func TestProxyForbidsByDefault(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-func BenchmarkProxy(b *testing.B) {
+func BenchmarkIntegrationProxy(b *testing.B) {
+	if testing.Short() {
+		b.Skip("Skipping integration benchmark")
+	}
+
 	logger := zerolog.New(zerolog.NewTestWriter(b)).Level(zerolog.WarnLevel)
 
 	handler := &http.ServeMux{}
@@ -123,7 +127,6 @@ func BenchmarkProxy(b *testing.B) {
 
 	download()
 
-	b.ResetTimer()
 	for b.Loop() {
 		download()
 	}
