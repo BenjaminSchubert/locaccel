@@ -20,8 +20,11 @@ jobs:
       - name: Generate code
         run: go generate ./...
 
+      - name: Create benchmarks directory
+        run: mkdir benchmarks
+
       - name: Run benchmarks for proxy
-        run: go test -benchtime=10x -benchmem -run=^$ -bench=^.*$ ./internal/handlers/proxy | tee benchmark_proxy.txt
+        run: go test --count=10 -benchtime=10x -benchmem -run=^$ -bench=^.*$ ./internal/handlers/proxy | tee benchmarks/internal_handlers_proxy.txt
 
       - name: Generate summary
         run: |
@@ -29,14 +32,14 @@ jobs:
           ## Benchmarks
 
           \`\`\`
-          $(cat benchmark_proxy.txt)
+          $(cat benchmarks/internal_handlers_proxy.txt)
           \`\`\`
           EOF
 
       - uses: actions/upload-artifact@v5
         with:
           name: benchmarks
-          path: benchmark_proxy.txt
+          path: benchmarks/*
           if-no-files-found: error
 
   test:

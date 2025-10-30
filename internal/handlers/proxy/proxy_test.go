@@ -117,7 +117,7 @@ func BenchmarkProxy(b *testing.B) {
 			"debian:stable-slim",
 			"bash",
 			"-c",
-			"apt-get update && apt-get install --download-only --assume-yes gnome",
+			"apt-get update && apt-get install --download-only --assume-yes firefox-esr",
 		)
 	}
 
