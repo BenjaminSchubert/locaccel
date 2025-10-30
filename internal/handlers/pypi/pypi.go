@@ -19,6 +19,27 @@ var (
 	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
 )
 
+type File struct {
+	CoreMetadata         json.RawMessage `json:"core-metadata"`
+	DataDistInfoMetadata json.RawMessage `json:"data-dist-info-metadata"`
+	Filename             string          `json:"filename"`
+	Hashes               json.RawMessage `json:"hashes"`
+	Provenance           string          `json:"provenance"`
+	RequiresPython       string          `json:"requires-python"`
+	Size                 int             `json:"size"`
+	UploadTime           string          `json:"upload-time"`
+	Yanked               json.RawMessage `json:"yanked"`
+	Url                  string          `json:"url"`
+}
+type PypiProject struct {
+	Files              []File          `json:"files"`
+	AlternateLocations json.RawMessage `json:"alternate-locations"`
+	Meta               json.RawMessage `json:"meta"`
+	Name               string          `json:"name"`
+	ProjectStatus      json.RawMessage `json:"project-status"`
+	Versions           json.RawMessage `json:"versions"`
+}
+
 func RegisterHandler(
 	upstream, expectedCDN string,
 	handler *http.ServeMux,
@@ -87,16 +108,17 @@ func RegisterHandler(
 func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) {
 	buf := bytes.NewBuffer(body)
 	decoder := json.NewDecoder(buf)
-	data := make(map[string]any)
+	decoder.DisallowUnknownFields()
+
+	data := PypiProject{}
 	if err := decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
 	expectedPrefix := ""
 
-	for _, fileInfo := range data["files"].([]any) {
-		file := fileInfo.(map[string]any)
-		originalUrl := file["url"].(string)
+	for i := range data.Files {
+		originalUrl := data.Files[i].Url
 
 		if expectedPrefix == "" {
 			switch {
@@ -124,7 +146,7 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		uri.Scheme = ""
 		uri.Path = encodedCDN + uri.Path
 
-		file["url"] = uri.String()
+		data.Files[i].Url = uri.String()
 	}
 
 	buf.Reset()
