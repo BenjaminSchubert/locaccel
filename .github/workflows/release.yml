@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
     secrets:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -30,6 +32,8 @@ jobs:
 
   package:
     uses: ./.github/workflows/package.yml
+    permissions:
+      contents: read
 
   release:
     runs-on: ubuntu-latest
