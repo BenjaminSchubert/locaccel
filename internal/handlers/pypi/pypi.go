@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -17,6 +18,15 @@ import (
 var (
 	ErrUnknownContentType = errors.New("unknown content type")
 	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
+	decoderWithBufferPool = sync.Pool{
+		New: func() any {
+			buffer := new(bytes.Buffer)
+			decoder := json.NewDecoder(buffer)
+			decoder.DisallowUnknownFields()
+			encoder := json.NewEncoder(buffer)
+			return &JSONHandler{buffer, decoder, encoder}
+		},
+	}
 )
 
 type File struct {
@@ -38,6 +48,12 @@ type PypiProject struct {
 	Name               string          `json:"name"`
 	ProjectStatus      json.RawMessage `json:"project-status"`
 	Versions           json.RawMessage `json:"versions"`
+}
+
+type JSONHandler struct {
+	buffer  *bytes.Buffer
+	decoder *json.Decoder
+	encoder *json.Encoder
 }
 
 func RegisterHandler(
@@ -106,12 +122,16 @@ func RegisterHandler(
 }
 
 func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) {
-	buf := bytes.NewBuffer(body)
-	decoder := json.NewDecoder(buf)
-	decoder.DisallowUnknownFields()
+	handler := decoderWithBufferPool.Get().(*JSONHandler)
+	defer decoderWithBufferPool.Put(handler)
+
+	handler.buffer.Reset()
+	if _, err := handler.buffer.Write(body); err != nil {
+		return nil, err
+	}
 
 	data := PypiProject{}
-	if err := decoder.Decode(&data); err != nil {
+	if err := handler.decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
@@ -149,12 +169,10 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		data.Files[i].Url = uri.String()
 	}
 
-	buf.Reset()
-	encoder := json.NewEncoder(buf)
-	err := encoder.Encode(data)
-	if err != nil {
+	handler.buffer.Reset()
+	if err := handler.encoder.Encode(data); err != nil {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	return handler.buffer.Bytes(), nil
 }
