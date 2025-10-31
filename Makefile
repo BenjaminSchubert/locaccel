@@ -16,13 +16,13 @@ build: generate
 
 lint: .cache/bin/golangci-lint generate
 	go mod tidy -diff
-	$< run ./...
-	$< fmt --diff-colored
+	$< run ./... ./.github/scripts/
+	$< fmt --diff-colored ./... ./.github/scripts/
 
 fix: .cache/bin/golangci-lint generate
 	go mod tidy
-	$< run --fix ./...
-	$< fmt
+	$< run --fix ./... ./.github/scripts/
+	$< fmt ./... ./.github/scripts/
 
 test: generate
 	go test -race -coverprofile .coverage -coverpkg=./... ./...
