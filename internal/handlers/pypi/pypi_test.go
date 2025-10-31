@@ -1,7 +1,6 @@
 package pypi
 
 import (
-	"bytes"
 	"encoding/base64"
 	"io"
 	"net/http"
@@ -77,8 +76,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	encodedCDN := "/cnd/" + base64.StdEncoding.EncodeToString([]byte(cdn))
 
 	for b.Loop() {
-		d := bytes.Clone(pytestInfo)
-		_, err := rewriteJsonV1(d, cdn, encodedCDN)
+		_, err := rewriteJsonV1(pytestInfo, cdn, encodedCDN)
 		require.NoError(b, err)
 	}
 }
