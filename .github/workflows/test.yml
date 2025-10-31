@@ -6,7 +6,8 @@ on:
       CODECOV_TOKEN:
         required: true
 
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   test:
