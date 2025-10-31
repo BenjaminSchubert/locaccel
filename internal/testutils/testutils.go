@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLogger(t *testing.T) *zerolog.Logger {
-	t.Helper()
+func TestLogger(tb testing.TB) *zerolog.Logger {
+	tb.Helper()
 
-	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(t)))
+	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(tb)))
 	return &logger
 }
 

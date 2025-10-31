@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -17,7 +18,43 @@ import (
 var (
 	ErrUnknownContentType = errors.New("unknown content type")
 	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
+	decoderWithBufferPool = sync.Pool{
+		New: func() any {
+			buffer := new(bytes.Buffer)
+			decoder := json.NewDecoder(buffer)
+			decoder.DisallowUnknownFields()
+			encoder := json.NewEncoder(buffer)
+			return &JSONHandler{buffer, decoder, encoder}
+		},
+	}
 )
+
+type File struct {
+	CoreMetadata         json.RawMessage `json:"core-metadata"`
+	DataDistInfoMetadata json.RawMessage `json:"data-dist-info-metadata"`
+	Filename             string          `json:"filename"`
+	Hashes               json.RawMessage `json:"hashes"`
+	Provenance           string          `json:"provenance"`
+	RequiresPython       string          `json:"requires-python"`
+	Size                 int             `json:"size"`
+	UploadTime           string          `json:"upload-time"`
+	Yanked               json.RawMessage `json:"yanked"`
+	Url                  string          `json:"url"`
+}
+type PypiProject struct {
+	Files              []File          `json:"files"`
+	AlternateLocations json.RawMessage `json:"alternate-locations"`
+	Meta               json.RawMessage `json:"meta"`
+	Name               string          `json:"name"`
+	ProjectStatus      json.RawMessage `json:"project-status"`
+	Versions           json.RawMessage `json:"versions"`
+}
+
+type JSONHandler struct {
+	buffer  *bytes.Buffer
+	decoder *json.Decoder
+	encoder *json.Encoder
+}
 
 func RegisterHandler(
 	upstream, expectedCDN string,
@@ -85,18 +122,23 @@ func RegisterHandler(
 }
 
 func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) {
-	buf := bytes.NewBuffer(body)
-	decoder := json.NewDecoder(buf)
-	data := make(map[string]any)
-	if err := decoder.Decode(&data); err != nil {
+	handler := decoderWithBufferPool.Get().(*JSONHandler)
+	defer decoderWithBufferPool.Put(handler)
+
+	handler.buffer.Reset()
+	if _, err := handler.buffer.Write(body); err != nil {
+		return nil, err
+	}
+
+	data := PypiProject{}
+	if err := handler.decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
 	expectedPrefix := ""
 
-	for _, fileInfo := range data["files"].([]any) {
-		file := fileInfo.(map[string]any)
-		originalUrl := file["url"].(string)
+	for i := range data.Files {
+		originalUrl := data.Files[i].Url
 
 		if expectedPrefix == "" {
 			switch {
@@ -124,15 +166,13 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		uri.Scheme = ""
 		uri.Path = encodedCDN + uri.Path
 
-		file["url"] = uri.String()
+		data.Files[i].Url = uri.String()
 	}
 
-	buf.Reset()
-	encoder := json.NewEncoder(buf)
-	err := encoder.Encode(data)
-	if err != nil {
+	handler.buffer.Reset()
+	if err := handler.encoder.Encode(data); err != nil {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	return handler.buffer.Bytes(), nil
 }
