@@ -91,12 +91,14 @@ jobs:
         if: ${{ !github.base_ref }}
         run: |
           set -eu
+          set -o pipefail
+
           benchstat head=benchmarks/head.txt | tee ./benchmarks/stats.txt
 
           cat << EOF >> $GITHUB_STEP_SUMMARY
-          ## Benchmarks
+          # Benchmarks
 
-          ### Statistics
+          ## Statistics
 
           \`\`\`
           $(cat benchmarks/stats.txt)
@@ -113,24 +115,22 @@ jobs:
         if: ${{ github.base_ref }}
         run: |
           set -eu
+          set -o pipefail
+
           benchstat base=benchmarks/base.txt head=benchmarks/head.txt | tee ./benchmarks/diff.txt
 
           cat << EOF >> $GITHUB_STEP_SUMMARY
-          ## Benchmarks
+          # Benchmarks
 
-          ### Difference
+          $(benchstat -format=csv base=benchmarks/base.txt head=benchmarks/head.txt | go run head/.github/scripts/format-benchmarks.go github.com/${{ github.repository }})
 
-          \`\`\`
-          $(cat benchmarks/diff.txt)
-          \`\`\`
-
-          ### Head
+          ## Head
 
           \`\`\`
           $(cat benchmarks/head.txt | grep -v "^\s" | grep -v "^--- BENCH:")
           \`\`\`
 
-          ### Base
+          ## Base
 
           \`\`\`
           $(cat benchmarks/base.txt | grep -v "^\s" | grep -v "^--- BENCH:")
