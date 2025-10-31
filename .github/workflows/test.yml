@@ -6,6 +6,8 @@ on:
       CODECOV_TOKEN:
         required: true
 
+permissions: {}
+
 jobs:
   test:
     runs-on: ubuntu-latest
