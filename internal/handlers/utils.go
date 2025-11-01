@@ -7,12 +7,20 @@ import (
 	"maps"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
+
+var bufferPool = sync.Pool{
+	New: func() any {
+		buffer := make([]byte, 1024*32)
+		return &buffer
+	},
+}
 
 func Forward(
 	w http.ResponseWriter,
@@ -64,7 +72,10 @@ func Forward(
 
 	w.WriteHeader(resp.StatusCode)
 
-	if _, err := io.Copy(w, resp.Body); err != nil {
+	buf := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(buf)
+
+	if _, err := io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{resp.Body}, *buf); err != nil {
 		hlog.FromRequest(r).Panic().Err(err).Msg("Error sending response to client")
 	}
 }
