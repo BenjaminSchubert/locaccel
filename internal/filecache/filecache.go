@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -21,6 +22,11 @@ var (
 	ErrInitialize          = errors.New("unable to initialize cache")
 	ErrCannotOpen          = errors.New("unable to open cached file")
 	ErrGCleanupNotRequired = errors.New("no need to remove old entries")
+	hashPool               = sync.Pool{
+		New: func() any {
+			return blake3.New()
+		},
+	}
 )
 
 type FileCache struct {
@@ -76,12 +82,15 @@ func (f *FileCache) SetupIngestion(
 		return src
 	}
 
-	hasher := blake3.New()
+	hasher := hashPool.Get().(*blake3.Hasher)
+	hasher.Reset()
 
 	return teereader.New(
 		src,
 		io.MultiWriter(dest, hasher),
 		func(totalread int, readErr, writeErr error) error {
+			defer hashPool.Put(hasher)
+
 			if totalread > (int(f.quotaHigh) / 2) {
 				logger.Warn().Int("size", totalread).Msg("File is too big for the cache. Skipping")
 				return f.cleanup(src, dest, logger)
