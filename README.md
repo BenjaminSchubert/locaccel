@@ -42,7 +42,7 @@ Many tools solve part of the problem, but each comes with trade‑offs:
 
 |Project|Strengths|Limitations|
 |-------|---------|-----------|
-|[Artifactory]((https://jfrog.com/artifactory/)) / [Sonatype Nexus](https://www.sonatype.com/products/sonatype-nexus-repository)|Full‑featured repository manager; handles every format Locaccel does and more|Heavyweight, complex configuration, higher resource footprint|
+|[Artifactory](https://jfrog.com/artifactory/) / [Sonatype Nexus](https://www.sonatype.com/products/sonatype-nexus-repository)|Full‑featured repository manager; handles every format Locaccel does and more|Heavyweight, complex configuration, higher resource footprint|
 |[apt‑cacher‑ng](https://github.com/ashang/apt-cacher-ng)|Excellent for Debian/Ubuntu/Other distributions package caches.|No support for other ecosystems|
 |[Squid](https://github.com/squid-cache/squid) / [Varnish](https://varnish-cache.org/)|Highly configurable HTTP caches|Lack built‑in URL rewriting for HTTPS endpoints, making it cumbersome for many modern registries|
 
