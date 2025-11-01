@@ -108,26 +108,51 @@ func BenchmarkIntegrationProxy(b *testing.B) {
 	)
 	b.Cleanup(server.Close)
 
+	testutils.Execute(
+		b,
+		"podman",
+		"run",
+		"--rm",
+		"--detach",
+		"--network=host",
+		"--dns=127.0.0.127",
+		"--env=http_proxy="+server.URL,
+		"--name=locaccel-test-debian",
+		"debian:stable-slim",
+		"sleep",
+		"INFINITY",
+	)
+	defer testutils.Execute(b, "podman", "stop", "--time", "1", "locaccel-test-debian")
+
 	download := func() {
 		testutils.Execute(
 			b,
 			"podman",
-			"run",
-			"--rm",
-			"--interactive",
-			"--network=host",
-			"--dns=127.0.0.127",
-			"--env=http_proxy="+server.URL,
-			"debian:stable-slim",
-			"bash",
-			"-c",
-			"apt-get update && apt-get install --download-only --assume-yes firefox-esr",
+			"exec",
+			"-it",
+			"locaccel-test-debian",
+			"apt-get",
+			"install",
+			"--download-only",
+			"--assume-yes",
+			"firefox-esr",
 		)
 	}
 
+	clean := func() {
+		testutils.Execute(b, "podman", "exec", "-it", "locaccel-test-debian", "apt-get", "clean")
+	}
+
+	// Prepare the cache
+	testutils.Execute(b, "podman", "exec", "-it", "locaccel-test-debian", "apt-get", "update")
 	download()
+	clean()
 
 	for b.Loop() {
 		download()
+
+		b.StopTimer()
+		clean()
+		b.StartTimer()
 	}
 }
