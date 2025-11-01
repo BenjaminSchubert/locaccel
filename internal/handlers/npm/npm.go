@@ -18,6 +18,35 @@ var (
 	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
 )
 
+type Dist struct {
+	Attestations json.RawMessage `json:"attestations,omitempty"`
+	FileCount    int             `json:"fileCount"`
+	Integrity    string          `json:"integrity"`
+	NpmSignature string          `json:"npm-signature,omitempty"`
+	Shasum       string          `json:"shasum"`
+	Signatures   json.RawMessage `json:"signatures,omitempty"`
+	Tarball      string          `json:"tarball"`
+	UnpackedSize int             `json:"unpackedSize"`
+}
+
+type Version struct {
+	Dependencies     json.RawMessage `json:"dependencies,omitempty"`
+	Deprecated       string          `json:"deprecated,omitempty"`
+	DevDependencies  json.RawMessage `json:"devDependencies,omitempty"`
+	Dist             Dist            `json:"dist"`
+	Engines          json.RawMessage `json:"engines"`
+	PeerDependencies json.RawMessage `json:"peerDependencies,omitempty"`
+	Version          string          `json:"version"`
+	Name             string          `json:"name"`
+}
+
+type NpmProject struct {
+	DistTag  json.RawMessage     `json:"dist-tags"`
+	Modified string              `json:"modified"`
+	Name     string              `json:"name"`
+	Versions map[string]*Version `json:"versions"`
+}
+
 func RegisterHandler(
 	upstream, scheme string,
 	handler *http.ServeMux,
@@ -76,22 +105,21 @@ func rewriteJson(
 ) ([]byte, error) {
 	buf := bytes.NewBuffer(body)
 	decoder := json.NewDecoder(buf)
-	data := make(map[string]any)
+	decoder.DisallowUnknownFields()
+	data := NpmProject{}
 	if err := decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
 	remote := ""
 
-	for _, info := range data["versions"].(map[string]any) {
-		dist := info.(map[string]any)["dist"].(map[string]any)
+	for _, version := range data.Versions {
 		if remote == "" {
-			tarball := dist["tarball"].(string)
-			if strings.HasPrefix(tarball, upstream) {
+			if strings.HasPrefix(version.Dist.Tarball, upstream) {
 				remote = upstream
 			} else {
 				for _, upstream := range upstreamCaches {
-					if strings.HasPrefix(tarball, upstream) {
+					if strings.HasPrefix(version.Dist.Tarball, upstream) {
 						remote = upstream
 						break
 					}
@@ -99,12 +127,12 @@ func rewriteJson(
 			}
 
 			if remote == "" {
-				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, tarball)
+				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, version.Dist.Tarball)
 			}
 		}
 
-		dist["tarball"] = scheme + "://" + r.Host + strings.TrimPrefix(
-			dist["tarball"].(string),
+		version.Dist.Tarball = scheme + "://" + r.Host + strings.TrimPrefix(
+			version.Dist.Tarball,
 			remote,
 		)
 	}
