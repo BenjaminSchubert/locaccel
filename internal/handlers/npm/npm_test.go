@@ -1,14 +1,19 @@
-package npm_test
+package npm
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
 
-	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
+	"github.com/stretchr/testify/require"
+
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 )
+
+var npmInfo []byte = nil
 
 func TestInstallNpmPackages(t *testing.T) {
 	t.Parallel()
@@ -17,7 +22,7 @@ func TestInstallNpmPackages(t *testing.T) {
 		t,
 		"npm",
 		func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL) {
-			npm.RegisterHandler(
+			RegisterHandler(
 				"https://registry.npmjs.org/",
 				"http",
 				handler,
@@ -50,4 +55,33 @@ func TestInstallNpmPackages(t *testing.T) {
 		},
 		true,
 	)
+}
+
+func BenchmarkJSONRewrite(b *testing.B) {
+	if npmInfo == nil {
+		req, err := http.NewRequestWithContext(
+			b.Context(),
+			"GET",
+			"https://registry.npmjs.org/react",
+			nil,
+		)
+		require.NoError(b, err)
+		req.Header.Add("Accept", "application/vnd.npm.install-v1+json")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(b, err)
+
+		npmInfo, err = io.ReadAll(resp.Body)
+		require.NoError(b, err)
+		require.NoError(b, resp.Body.Close())
+	}
+
+	r, err := http.NewRequestWithContext(b.Context(), "GET", "https://locaccel.test", nil)
+	require.NoError(b, err)
+
+	for b.Loop() {
+		data := bytes.Clone(npmInfo)
+		_, err := rewriteJson(data, r, "https://registry.npmjs.org/", "https", nil)
+		require.NoError(b, err)
+	}
 }
