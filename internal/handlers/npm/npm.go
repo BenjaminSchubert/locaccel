@@ -1,7 +1,6 @@
 package npm
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,11 +102,16 @@ func rewriteJson(
 	upstream, scheme string,
 	upstreamCaches []string,
 ) ([]byte, error) {
-	buf := bytes.NewBuffer(body)
-	decoder := json.NewDecoder(buf)
-	decoder.DisallowUnknownFields()
+	handler := handlers.JSONHandlerPool.Get().(*handlers.JSONHandler)
+	defer handlers.JSONHandlerPool.Put(handler)
+
+	handler.Buffer.Reset()
+	if _, err := handler.Buffer.Write(body); err != nil {
+		return nil, err
+	}
+
 	data := NpmProject{}
-	if err := decoder.Decode(&data); err != nil {
+	if err := handler.Decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
@@ -137,10 +141,10 @@ func rewriteJson(
 		)
 	}
 
-	buf.Reset()
-	if err := json.NewEncoder(buf).Encode(data); err != nil {
+	handler.Buffer.Reset()
+	if err := handler.Encoder.Encode(data); err != nil {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	return handler.Buffer.Bytes(), nil
 }

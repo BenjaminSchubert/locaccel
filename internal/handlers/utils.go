@@ -3,16 +3,34 @@ package handlers
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"maps"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
 )
+
+var JSONHandlerPool = sync.Pool{
+	New: func() any {
+		buffer := new(bytes.Buffer)
+		decoder := json.NewDecoder(buffer)
+		decoder.DisallowUnknownFields()
+		encoder := json.NewEncoder(buffer)
+		return &JSONHandler{buffer, decoder, encoder}
+	},
+}
+
+type JSONHandler struct {
+	Buffer  *bytes.Buffer
+	Decoder *json.Decoder
+	Encoder *json.Encoder
+}
 
 func Forward(
 	w http.ResponseWriter,
