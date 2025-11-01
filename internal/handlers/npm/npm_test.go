@@ -1,7 +1,6 @@
 package npm
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"net/url"
@@ -80,8 +79,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	require.NoError(b, err)
 
 	for b.Loop() {
-		data := bytes.Clone(npmInfo)
-		_, err := rewriteJson(data, r, "https://registry.npmjs.org/", "https", nil)
+		_, err := rewriteJson(npmInfo, r, "https://registry.npmjs.org/", "https", nil)
 		require.NoError(b, err)
 	}
 }

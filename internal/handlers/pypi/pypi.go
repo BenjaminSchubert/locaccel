@@ -1,7 +1,6 @@
 package pypi
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -18,15 +16,6 @@ import (
 var (
 	ErrUnknownContentType = errors.New("unknown content type")
 	ErrUnexpectedCDN      = errors.New("unexpected CDN requested")
-	decoderWithBufferPool = sync.Pool{
-		New: func() any {
-			buffer := new(bytes.Buffer)
-			decoder := json.NewDecoder(buffer)
-			decoder.DisallowUnknownFields()
-			encoder := json.NewEncoder(buffer)
-			return &JSONHandler{buffer, decoder, encoder}
-		},
-	}
 )
 
 type File struct {
@@ -48,12 +37,6 @@ type PypiProject struct {
 	Name               string          `json:"name"`
 	ProjectStatus      json.RawMessage `json:"project-status"`
 	Versions           json.RawMessage `json:"versions"`
-}
-
-type JSONHandler struct {
-	buffer  *bytes.Buffer
-	decoder *json.Decoder
-	encoder *json.Encoder
 }
 
 func RegisterHandler(
@@ -122,16 +105,16 @@ func RegisterHandler(
 }
 
 func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) {
-	handler := decoderWithBufferPool.Get().(*JSONHandler)
-	defer decoderWithBufferPool.Put(handler)
+	handler := handlers.JSONHandlerPool.Get().(*handlers.JSONHandler)
+	defer handlers.JSONHandlerPool.Put(handler)
 
-	handler.buffer.Reset()
-	if _, err := handler.buffer.Write(body); err != nil {
+	handler.Buffer.Reset()
+	if _, err := handler.Buffer.Write(body); err != nil {
 		return nil, err
 	}
 
 	data := PypiProject{}
-	if err := handler.decoder.Decode(&data); err != nil {
+	if err := handler.Decoder.Decode(&data); err != nil {
 		return nil, err
 	}
 
@@ -169,10 +152,10 @@ func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) 
 		data.Files[i].Url = uri.String()
 	}
 
-	handler.buffer.Reset()
-	if err := handler.encoder.Encode(data); err != nil {
+	handler.Buffer.Reset()
+	if err := handler.Encoder.Encode(data); err != nil {
 		return nil, err
 	}
 
-	return handler.buffer.Bytes(), nil
+	return handler.Buffer.Bytes(), nil
 }
