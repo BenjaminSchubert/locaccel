@@ -272,7 +272,7 @@ func BenchmarkFileIngestion(b *testing.B) {
 			require.NoError(b, err)
 
 			logger := testutils.TestLogger(b)
-			cache, err := filecache.NewFileCache(b.TempDir(), 100, 1000, logger)
+			cache, err := filecache.NewFileCache(b.TempDir(), sizeB.Bytes, sizeB.Bytes*10, logger)
 			require.NoError(b, err)
 
 			data := make([]byte, sizeB.Bytes)
@@ -288,6 +288,7 @@ func BenchmarkFileIngestion(b *testing.B) {
 				n, err := io.Copy(io.Discard, r)
 				require.NoError(b, err)
 				require.Equal(b, sizeB.Bytes, n)
+				require.NoError(b, r.Close())
 				buf.Reset(data)
 			}
 		})
