@@ -18,6 +18,8 @@ var (
 	errTest            = errors.New("test error")
 )
 
+const data = "hello world!"
+
 type MaxSizeWriter struct{}
 
 func (m MaxSizeWriter) Write(p []byte) (n int, err error) {
@@ -26,8 +28,6 @@ func (m MaxSizeWriter) Write(p []byte) (n int, err error) {
 
 func TestReadCopiesCorrectly(t *testing.T) {
 	t.Parallel()
-
-	data := "hello world!"
 
 	src := bytes.NewBufferString(data)
 	writer := bytes.NewBufferString("")
@@ -74,8 +74,6 @@ func TestReadReportsErrors(t *testing.T) {
 func TestReaderHandlesPartialReads(t *testing.T) {
 	t.Parallel()
 
-	data := "hello world!"
-
 	src := iotest.HalfReader(bytes.NewBufferString(data))
 	writer := bytes.NewBufferString("")
 
@@ -96,8 +94,6 @@ func TestReaderHandlesPartialReads(t *testing.T) {
 
 func TestReadsAllEvenOnWriteError(t *testing.T) {
 	t.Parallel()
-
-	data := "hello world!"
 
 	src := bytes.NewBufferString(data)
 	writer := MaxSizeWriter{}

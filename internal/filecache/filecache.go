@@ -29,6 +29,8 @@ var (
 	}
 )
 
+const tmpDirName = "_tmp"
+
 type FileCache struct {
 	root      string
 	tmpdir    string
@@ -42,7 +44,7 @@ func NewFileCache(
 	quotaLow, quotaHigh int64,
 	logger *zerolog.Logger,
 ) (*FileCache, error) {
-	tmpdir := path.Join(root, "_tmp")
+	tmpdir := path.Join(root, tmpDirName)
 
 	// Ensure the tempdir exists
 	if err := os.MkdirAll(tmpdir, 0o750); err != nil {
@@ -167,7 +169,7 @@ func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err err
 	var fileInfo os.FileInfo
 
 	for _, dir := range dirs {
-		if dir.Name() == "_tmp" {
+		if dir.Name() == tmpDirName {
 			continue
 		}
 
@@ -266,7 +268,7 @@ func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles m
 
 	for _, dir := range dirs {
 		dirName := dir.Name()
-		if dirName == "_tmp" {
+		if dirName == tmpDirName {
 			continue
 		}
 
@@ -305,7 +307,7 @@ func (f *FileCache) GetAllHashes() ([]string, error) {
 	hashes := make([]string, 0, 1000)
 
 	for _, dir := range dirs {
-		if dir.Name() == "_tmp" {
+		if dir.Name() == tmpDirName {
 			continue
 		}
 

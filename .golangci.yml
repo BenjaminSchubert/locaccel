@@ -20,28 +20,43 @@ linters:
     - canonicalheader
     - containedctx
     - contextcheck
+    - copyloopvar
     - depguard
     - dupl
     - durationcheck
     - err113
     - errname
     - exhaustive
+    - goconst
     - gocritic
     - gosec
+    - iface
+    - ineffassign
+    - intrange
+    - mirror
+    - modernize
+    - nolintlint
     - noctx
     - nosprintfhostport
     - paralleltest
     - perfsprint
     - prealloc
+    - promlinter
+    - staticcheck
     - tagalign
     - testifylint
     - thelper
+    - tparallel
+    - thelper
     - unconvert
     - unused
+    - usestdlibvars
     - usetesting
     - wastedassign
     - zerologlint
   settings:
+    copyloopvar:
+      check-alias: true
     depguard:
       rules:
         main:
@@ -53,6 +68,8 @@ linters:
       disabled-checks:
         - httpNoBody
         - whyNoLint
+    promlinter:
+      strict: true
 
   exclusions:
     paths:

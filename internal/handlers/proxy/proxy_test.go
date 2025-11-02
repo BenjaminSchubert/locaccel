@@ -190,7 +190,7 @@ func BenchmarkProxy(b *testing.B) {
 	require.NoError(b, err)
 	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(uri)}}
 
-	req, err := http.NewRequestWithContext(b.Context(), "GET", upstream.URL, nil)
+	req, err := http.NewRequestWithContext(b.Context(), http.MethodGet, upstream.URL, nil)
 	require.NoError(b, err)
 
 	for b.Loop() {

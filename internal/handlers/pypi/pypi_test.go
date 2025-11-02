@@ -57,7 +57,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	if pytestInfo == nil {
 		req, err := http.NewRequestWithContext(
 			b.Context(),
-			"GET",
+			http.MethodGet,
 			"https://pypi.org/simple/pytest/",
 			nil,
 		)
