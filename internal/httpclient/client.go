@@ -453,7 +453,23 @@ func (c *Client) setupIngestion(
 			}
 
 			if dbEntry != nil {
-				dbEntry.Value = append(dbEntry.Value, cacheResp)
+				match := false
+				// Do we match a vary headers and should replace it?
+				for idx := range dbEntry.Value {
+					if httpcaching.MatchVaryHeaders(
+						req.Header,
+						dbEntry.Value[idx].VaryHeaders,
+						logger,
+					) {
+						dbEntry.Value[idx] = cacheResp
+						match = true
+						break
+					}
+				}
+
+				if !match {
+					dbEntry.Value = append(dbEntry.Value, cacheResp)
+				}
 				err = c.db.Save(cacheKey, dbEntry)
 			} else {
 				err = c.db.New(cacheKey, CachedResponses{cacheResp})
