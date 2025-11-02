@@ -1,6 +1,8 @@
 package proxy_test
 
 import (
+	"crypto/rand"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -154,5 +156,56 @@ func BenchmarkIntegrationProxy(b *testing.B) {
 		b.StopTimer()
 		clean()
 		b.StartTimer()
+	}
+}
+
+func BenchmarkProxy(b *testing.B) {
+	data := make([]byte, 1024*1024)
+	_, err := rand.Read(data)
+	require.NoError(b, err)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Cache-Control", "max-age=1,must-revalidate")
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(b, err)
+	}))
+	b.Cleanup(upstream.Close)
+
+	upstreamUri, err := url.Parse(upstream.URL)
+	require.NoError(b, err)
+
+	logger := zerolog.New(zerolog.NewTestWriter(b)).Level(zerolog.ErrorLevel)
+
+	handler := &http.ServeMux{}
+	proxy.RegisterHandler(
+		[]string{upstreamUri.Host},
+		handler,
+		testutils.NewClient(b, &logger),
+		nil,
+	)
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(
+			handler,
+			"proxy",
+			&logger,
+			nil,
+		),
+	)
+	b.Cleanup(server.Close)
+
+	uri, err := url.Parse(server.URL)
+	require.NoError(b, err)
+	client := &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(uri)}}
+
+	req, err := http.NewRequestWithContext(b.Context(), "GET", upstream.URL, nil)
+	require.NoError(b, err)
+
+	for b.Loop() {
+		resp, err := client.Do(req)
+		require.NoError(b, err)
+		require.Equal(b, http.StatusOK, resp.StatusCode)
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(b, err)
+		require.NoError(b, resp.Body.Close())
 	}
 }

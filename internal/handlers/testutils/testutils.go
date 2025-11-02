@@ -78,7 +78,7 @@ func NewClientWithUnderlyingClient(
 		cache,
 		logger,
 		false,
-		func(r *http.Request, status string) {},
+		middleware.SetCacheState,
 		time.Now,
 		time.Since,
 	), client
