@@ -38,7 +38,7 @@ func (c *Clock) Advance() {
 
 func setup(
 	t *testing.T,
-) (client *Client, clock *Clock, valCache func(map[string]CachedResponses), valQueries func([]string)) {
+) (client *Client, clock *Clock, valCache func(map[string]CachedResponses, []string), valQueries func([]string)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
@@ -63,8 +63,8 @@ func setup(
 			clock.Since,
 		),
 		clock,
-		func(expected map[string]CachedResponses) {
-			validateCache(t, cache, expected)
+		func(expectedResponses map[string]CachedResponses, expectedHashes []string) {
+			validateCache(t, cache, expectedResponses, expectedHashes)
 		},
 		func(expected []string) { assert.Equal(t, expected, hits) }
 }
@@ -112,7 +112,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "hello!", body)
 
-	validateCache(map[string]CachedResponses{})
+	validateCache(map[string]CachedResponses{}, nil)
 	validateQueries([]string{"miss"})
 }
 
@@ -133,7 +133,7 @@ func TestClientDoesNotCachedErrors(t *testing.T) {
 	_, err = client.Do(req, UpstreamCache{}) //nolint:bodyclose
 	require.ErrorContains(t, err, "EOF")
 
-	validateCache(map[string]CachedResponses{})
+	validateCache(map[string]CachedResponses{}, nil)
 	validateQueries([]string{})
 }
 
@@ -153,7 +153,7 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, "Hello!", body)
 
-	validateCache(map[string]CachedResponses{})
+	validateCache(map[string]CachedResponses{}, nil)
 	validateQueries([]string{"miss"})
 }
 
@@ -192,7 +192,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss"})
 }
 
@@ -398,7 +398,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss", "miss", "hit", "hit"})
 }
 
@@ -520,7 +520,7 @@ func TestValidationEtag(t *testing.T) {
 							clock.Now().Add(-time.Second).Local(),
 						},
 					},
-				})
+				}, nil)
 
 				validateQueries([]string{"miss", "revalidated"})
 			})
@@ -619,7 +619,7 @@ func TestValidationLastModified(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 
 	validateQueries([]string{"miss", "revalidated"})
 }
@@ -746,7 +746,7 @@ func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss"})
 }
 
@@ -795,7 +795,7 @@ func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss"})
 }
 
@@ -855,21 +855,6 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 					"Content-Length": []string{"6"},
 					"Content-Type":   []string{"text/plain; charset=utf-8"},
 					"Date": []string{
-						clock.Now().Add(-3 * time.Second).Format(http.TimeFormat),
-					},
-					"Etag": []string{"123"},
-				},
-				http.Header{},
-				clock.Now().Add(-3 * time.Second).Local(),
-			},
-			{
-				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
-				200,
-				http.Header{
-					"Cache-Control":  []string{"public"},
-					"Content-Length": []string{"6"},
-					"Content-Type":   []string{"text/plain; charset=utf-8"},
-					"Date": []string{
 						clock.Now().Add(-time.Second).Format(http.TimeFormat),
 					},
 					"Etag": []string{"123"},
@@ -878,7 +863,7 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 				clock.Now().Add(-time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss", "miss"})
 	assert.Equal(t, 3, count, "Upstream should have been called 3 times")
 }
@@ -941,7 +926,7 @@ func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 				clock.Now().Add(-2 * time.Second).Local(),
 			},
 		},
-	})
+	}, nil)
 	validateQueries([]string{"miss", "miss"})
 }
 
@@ -1055,4 +1040,95 @@ func TestClientAddsConditionalQueriesInformation(t *testing.T) {
 			assert.Equal(t, tc.expectedHeaders, req.Header)
 		})
 	}
+}
+
+func TestKeepOnlyLatestVersionForVaryHeaders(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	counter := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		counter += 1
+		w.Header().Add("Cache-Control", "public")
+		w.Header().Add("Vary", "Accept")
+		w.Header().Add("Counter", strconv.Itoa(counter))
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
+		_, err := w.Write([]byte("Hello! " + strconv.Itoa(counter)))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	// No Vary
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 1", body)
+
+	// Vary
+	resp, body = makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"Accept": {"text/plain"}},
+		nil,
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 2", body)
+
+	// No Vary again
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 3", body)
+
+	// Vary again
+	resp, body = makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"Accept": {"text/plain"}},
+		nil,
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 4", body)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"637bbb3c745ab7eeed63bde324207aac7c487b3947ad54fb967aa5b5bc7960e4",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Counter":        []string{"3"},
+					"Content-Length": []string{"8"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+					"Vary": []string{"Accept"},
+				},
+				http.Header{"Accept": nil},
+				clock.Now().Add(-2 * time.Second).Local(),
+			},
+			{
+				"c3c53fea4e69694dddf35d92d29cc5dd743c20cc80f1418461ce115c80b39095",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Counter":        []string{"4"},
+					"Content-Length": []string{"8"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+					"Vary": []string{"Accept"},
+				},
+				http.Header{"Accept": []string{"text/plain"}},
+				clock.Now().Add(-time.Second).Local(),
+			},
+		},
+	}, []string{"0c182ae20fca17b0e8c3e79cacdd80dbc1f84b55d379191ff7ecaf860d9bf2fd", "20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b", "637bbb3c745ab7eeed63bde324207aac7c487b3947ad54fb967aa5b5bc7960e4", "c3c53fea4e69694dddf35d92d29cc5dd743c20cc80f1418461ce115c80b39095"})
+	validateQueries([]string{"miss", "miss", "miss", "miss"})
 }

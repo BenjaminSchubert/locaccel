@@ -20,22 +20,25 @@ import (
 func validateCache(
 	t *testing.T,
 	cache *Cache,
-	expected map[string]CachedResponses,
+	expectedResponses map[string]CachedResponses,
+	expectedHashes []string,
 ) {
 	t.Helper()
 
-	expectedHashesMap := map[string]struct{}{}
-	for _, responses := range expected {
-		for _, resp := range responses {
-			expectedHashesMap[resp.ContentHash] = struct{}{}
+	if expectedHashes == nil {
+		expectedHashesMap := map[string]struct{}{}
+		for _, responses := range expectedResponses {
+			for _, resp := range responses {
+				expectedHashesMap[resp.ContentHash] = struct{}{}
+			}
+		}
+		expectedHashes = make([]string, 0, len(expectedHashesMap))
+		for hash := range expectedHashesMap {
+			expectedHashes = append(expectedHashes, hash)
 		}
 	}
-	expectedHashes := make([]string, 0, len(expectedHashesMap))
-	for hash := range expectedHashesMap {
-		expectedHashes = append(expectedHashes, hash)
-	}
 
-	entriesInDB := make(map[string]CachedResponses, len(expected))
+	entriesInDB := make(map[string]CachedResponses, len(expectedResponses))
 	err := cache.db.Iterate(
 		t.Context(),
 		func(key []byte, value *database.Entry[CachedResponses]) error {
@@ -49,7 +52,12 @@ func validateCache(
 	hashes, err := cache.cache.GetAllHashes()
 	require.NoError(t, err)
 
-	assert.Equal(t, expected, entriesInDB, "Entries in the database are not what is expected")
+	assert.Equal(
+		t,
+		expectedResponses,
+		entriesInDB,
+		"Entries in the database are not what is expected",
+	)
 	assert.ElementsMatch(t, expectedHashes, hashes)
 }
 
@@ -183,7 +191,7 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 			http.Header{},
 			clock.Now().Add(-time.Second).Local(),
 		},
-	}})
+	}}, nil)
 }
 
 func TestCanCleanOldEntries(t *testing.T) {
@@ -255,5 +263,6 @@ func TestCanCleanOldEntries(t *testing.T) {
 				},
 			},
 		},
+		nil,
 	)
 }
