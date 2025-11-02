@@ -60,7 +60,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	if npmInfo == nil {
 		req, err := http.NewRequestWithContext(
 			b.Context(),
-			"GET",
+			http.MethodGet,
 			"https://registry.npmjs.org/react",
 			nil,
 		)
@@ -75,7 +75,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 		require.NoError(b, resp.Body.Close())
 	}
 
-	r, err := http.NewRequestWithContext(b.Context(), "GET", "https://locaccel.test", nil)
+	r, err := http.NewRequestWithContext(b.Context(), http.MethodGet, "https://locaccel.test", nil)
 	require.NoError(b, err)
 
 	for b.Loop() {
