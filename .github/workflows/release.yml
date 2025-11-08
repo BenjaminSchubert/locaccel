@@ -45,7 +45,7 @@ jobs:
       - test
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
         with:
           ref: ${{ github.ref_name }}
 
@@ -55,13 +55,13 @@ jobs:
           echo "$(git tag -l --format='%(contents:body)' ${{ github.ref_name }})" | tee --append $GITHUB_ENV
           echo "EOF" | tee --append $GITHUB_ENV
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53  # v6.0.0
         with:
           name: locaccel-packages
           path: dist/
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090  # v2.4.1
         with:
           body: ${{ env.GIT_TAG_BODY }}
           files: dist/*.tar.gz

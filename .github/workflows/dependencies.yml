@@ -11,15 +11,15 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00  # v6.0.0
         with:
           go-version: stable
 
       - name: Run snapshot action
-        uses: actions/go-dependency-submission@v2
+        uses: actions/go-dependency-submission@f35d5c9af13ce9cc32f7930b171e315e878f6921  # v2.0.3
         with:
             go-mod-path: go.mod
             go-build-target: cmd/locaccel/locaccel.go
