@@ -96,7 +96,10 @@ func main() {
 		}
 	}()
 
-	var registry *prometheus.Registry
+	var registry interface {
+		prometheus.Registerer
+		prometheus.Gatherer
+	}
 	if conf.EnableMetrics {
 		registry := prometheus.NewRegistry()
 		registry.MustRegister(
