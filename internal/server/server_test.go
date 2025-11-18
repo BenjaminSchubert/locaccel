@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
+	"github.com/benjaminschubert/locaccel/internal/middleware"
 	"github.com/benjaminschubert/locaccel/internal/testutils"
 )
 
@@ -16,7 +17,7 @@ func TestServerInitialization(t *testing.T) {
 
 	conf := config.Default(func(s string) (string, bool) { return "", false })
 	conf.EnableProfiling = true
-	srv := New(conf, nil, nil, logger, nil)
+	srv := New(conf, nil, nil, logger, nil, &middleware.Statistics{})
 
 	require.Len(t, srv.servers, 10)
 

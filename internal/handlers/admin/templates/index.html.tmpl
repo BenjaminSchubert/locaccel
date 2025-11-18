@@ -14,6 +14,31 @@
 
         <section>
             <h2>Statistics</h2>
+            <table>
+                <tbody>
+                    <tr>
+                        <td>Uncacheable</td>
+                        <td>{{ .MiddlewareStats.UnCacheable.Load }}</td>
+                    </tr>
+                    <tr>
+                        <td>Hits</td>
+                        <td>{{ .MiddlewareStats.CacheHits.Load }}</td>
+                    </tr>
+                    <tr>
+                        <td>Misses</td>
+                        <td>{{ .MiddlewareStats.CacheMisses.Load }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Downloaded</td>
+                        <td>{{ asBytes .MiddlewareStats.BytesDownloaded.Load }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Served</td>
+                        <td>{{ asBytes .MiddlewareStats.BytesServed.Load }}</td>
+                    </tr>
+                <tbody>
+            </table>
+
             <table id="statistics">
                 <thead>
                     <tr>
@@ -25,13 +50,13 @@
                 <tbody>
                     <tr>
                         <td>Database</td>
-                        <td>{{ .Stats.DatabaseEntries }}</td>
-                        <td>{{ .Stats.DatabaseSize }}</td>
+                        <td>{{ .CacheStats.DatabaseEntries }}</td>
+                        <td>{{ .CacheStats.DatabaseSize }}</td>
                     </tr>
                     <tr>
                         <td>File Cache</td>
-                        <td>{{ .Stats.FileCacheEntries }}</td>
-                        <td>{{ .Stats.FileCacheSize }}</td>
+                        <td>{{ .CacheStats.FileCacheEntries }}</td>
+                        <td>{{ .CacheStats.FileCacheSize }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -46,7 +71,7 @@
                     <th>Size</th>
                 </thead>
                 <tbody>
-                {{ range $key, $info := .Stats.UsagePerHostName }}
+                {{ range $key, $info := .CacheStats.UsagePerHostName }}
                     <tr>
                         <td><a href="/hostname/{{ $key }}">{{ $key }}</a></td>
                         <td>{{ $info.Entries }}</td>

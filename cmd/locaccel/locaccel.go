@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"path"
 	"runtime/debug"
 	"time"
 
@@ -108,6 +109,22 @@ func main() {
 		)
 	}
 
+	statsPath := path.Join(conf.Cache.Path, "statistics.json")
+	stats, err := middleware.LoadSavedStatistics(statsPath, &logger)
+	if err != nil {
+		logger.Panic().
+			Err(err).
+			Str("path", statsPath).
+			Msg("Unable to load previous statistics. Please remove or fix the file")
+	}
+	defer func() {
+		if err := stats.Save(statsPath, &logger); err != nil {
+			logger.Error().Err(err).Msg("Unable to save statistics about cache")
+		} else {
+			logger.Debug().Str("path", statsPath).Msg("Statistics saved to disk")
+		}
+	}()
+
 	cachingClient := httpclient.New(
 		client,
 		cache,
@@ -118,7 +135,7 @@ func main() {
 		time.Since,
 	)
 
-	srv := server.New(conf, cachingClient, cache, &logger, registry)
+	srv := server.New(conf, cachingClient, cache, &logger, registry, stats)
 	if err := srv.ListenAndServe(); err != nil {
 		logger.Panic().Err(err).Msg("An error occurred while shutting down the server")
 	}

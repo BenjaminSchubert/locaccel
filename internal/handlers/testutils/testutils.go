@@ -90,8 +90,10 @@ func NewServer(
 	handlerName, handlerType string,
 	counterMiddleware *tst.RequestCounterMiddleware,
 	logger *zerolog.Logger,
-) *httptest.Server {
+) (*httptest.Server, *middleware.Statistics) {
 	t.Helper()
+
+	stats := &middleware.Statistics{}
 
 	srv := httptest.NewServer(
 		counterMiddleware.GetHandler(
@@ -100,12 +102,13 @@ func NewServer(
 				handlerName,
 				logger,
 				prometheus.NewPedanticRegistry(),
+				stats,
 			),
 			handlerType,
 		),
 	)
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, stats
 }
 
 func RunIntegrationTestsForHandler(
@@ -133,7 +136,7 @@ func RunIntegrationTestsForHandler(
 				upstreamLogger := logger.With().Str("type", "upstream").Logger()
 				handler := &http.ServeMux{}
 				registerHandler(handler, NewClient(t, &upstreamLogger), nil)
-				server := NewServer(
+				server, _ := NewServer(
 					t,
 					handler,
 					handlerName,
@@ -151,7 +154,7 @@ func RunIntegrationTestsForHandler(
 
 			handler := &http.ServeMux{}
 			registerHandler(handler, NewClient(t, logger), upstreams)
-			server := NewServer(
+			server, stats := NewServer(
 				t,
 				handler,
 				handlerName,
@@ -161,6 +164,10 @@ func RunIntegrationTestsForHandler(
 			)
 
 			test(t, server.URL)
+
+			assert.Positive(t, stats.BytesServed.Load())
+			assert.Positive(t, stats.CacheMisses.Load())
+			assert.Equal(t, uint64(0), stats.CacheHits.Load())
 		})
 	}
 
@@ -177,7 +184,7 @@ func RunIntegrationTestsForHandler(
 		cachingClient, httpClient := NewClientWithUnderlyingClient(t, logger)
 
 		registerHandler(handler, cachingClient, nil)
-		server := NewServer(
+		server, stats := NewServer(
 			t,
 			handler,
 			handlerName,
@@ -189,10 +196,16 @@ func RunIntegrationTestsForHandler(
 		// Run the test, populating the cache
 		test(t, server.URL)
 
+		assert.Positive(t, stats.BytesServed.Load())
+		assert.Positive(t, stats.CacheMisses.Load())
+		assert.Equal(t, uint64(0), stats.CacheHits.Load())
+
 		httpClient.Transport = &OfflineTransport{}
 
 		// Run the test again, with the cache disconnected
 		test(t, server.URL)
+
+		assert.Equal(t, stats.CacheHits.Load(), stats.CacheMisses.Load())
 	})
 }
 

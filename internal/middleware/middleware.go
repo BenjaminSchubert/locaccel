@@ -11,7 +11,11 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
-func newLoggingMiddleware(handler http.Handler, logger *zerolog.Logger) http.Handler {
+func newLoggingMiddleware(
+	handler http.Handler,
+	logger *zerolog.Logger,
+	statistics *Statistics,
+) http.Handler {
 	logHandler := hlog.NewHandler(*logger)
 
 	correlationID := hlog.RequestIDHandler("id", "X-Locaccel-Correlation-ID")
@@ -40,8 +44,28 @@ func newLoggingMiddleware(handler http.Handler, logger *zerolog.Logger) http.Han
 		if ua := req.Header.Get("User-Agent"); ua != "" {
 			l = l.Str("usage-agent", ua)
 		}
+		cacheState := GetCacheState(ctx)
+
+		if size < 0 {
+			panic("Unexpected negative size")
+		}
+
+		switch cacheState {
+		case "N/A":
+			statistics.UnCacheable.Add(1)
+			statistics.BytesDownloaded.Add(uint64(size))
+		case "hit":
+			statistics.CacheHits.Add(1)
+		case "miss":
+			statistics.CacheMisses.Add(1)
+			statistics.BytesDownloaded.Add(uint64(size))
+		default:
+			panic("Unexpected cache state: " + cacheState)
+		}
+		statistics.BytesServed.Add(uint64(size))
+
 		l.
-			Str("cache", GetCacheState(ctx)).
+			Str("cache", cacheState).
 			Str("ip", req.RemoteAddr).
 			Str("method", req.Method).
 			Int("status", status).
@@ -134,10 +158,11 @@ func ApplyAllMiddlewares(
 	serviceName string,
 	logger *zerolog.Logger,
 	registry prometheus.Registerer,
+	statistics *Statistics,
 ) http.Handler {
 	return StateHandler(
 		newMetricsMiddleware(
-			newLoggingMiddleware(newTraceMiddleware(handler, logger), logger),
+			newLoggingMiddleware(newTraceMiddleware(handler, logger), logger, statistics),
 			serviceName,
 			registry,
 		),

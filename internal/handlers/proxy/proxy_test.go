@@ -71,9 +71,15 @@ func TestProxyForbidsByDefault(t *testing.T) {
 	handler := &http.ServeMux{}
 	proxy.RegisterHandler([]string{}, handler, testutils.NewClient(t, logger), nil)
 	server := httptest.NewServer(
-		middleware.ApplyAllMiddlewares(handler, "proxy", logger, prometheus.NewPedanticRegistry()),
+		middleware.ApplyAllMiddlewares(
+			handler,
+			"proxy",
+			logger,
+			prometheus.NewPedanticRegistry(),
+			&middleware.Statistics{},
+		),
 	)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	uri, err := url.Parse(server.URL)
 	require.NoError(t, err)
@@ -100,7 +106,9 @@ func BenchmarkIntegrationProxy(b *testing.B) {
 		nil,
 	)
 
-	server := httptest.NewServer(middleware.ApplyAllMiddlewares(handler, "proxy", &logger, nil))
+	server := httptest.NewServer(
+		middleware.ApplyAllMiddlewares(handler, "proxy", &logger, nil, &middleware.Statistics{}),
+	)
 	b.Cleanup(server.Close)
 
 	testutils.Execute(
@@ -182,6 +190,7 @@ func BenchmarkProxy(b *testing.B) {
 			"proxy",
 			&logger,
 			nil,
+			&middleware.Statistics{},
 		),
 	)
 	b.Cleanup(server.Close)
