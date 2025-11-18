@@ -13,6 +13,8 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
+	"github.com/benjaminschubert/locaccel/internal/middleware"
+	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
 //go:embed templates
@@ -22,8 +24,9 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 type indexData struct {
-	Stats httpclient.CacheStatistics
-	Conf  string
+	CacheStats      httpclient.CacheStatistics
+	MiddlewareStats *middleware.Statistics
+	Conf            string
 }
 
 type hostnameData struct {
@@ -31,9 +34,15 @@ type hostnameData struct {
 	Entries  httpclient.CacheList
 }
 
-func RegisterHandler(handler *http.ServeMux, cache *httpclient.Cache, conf *config.Config) error {
+func RegisterHandler(
+	handler *http.ServeMux,
+	cache *httpclient.Cache,
+	conf *config.Config,
+	middlewareStats *middleware.Statistics,
+) error {
 	funcs := template.FuncMap{
-		"join": strings.Join,
+		"asBytes": units.PrettyBytes[uint64],
+		"join":    strings.Join,
 	}
 	templates, err := template.New("index").Funcs(funcs).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
@@ -97,7 +106,11 @@ func RegisterHandler(handler *http.ServeMux, cache *httpclient.Cache, conf *conf
 			return
 		}
 
-		err = templates.ExecuteTemplate(w, "index.html.tmpl", indexData{stats, renderedConfig})
+		err = templates.ExecuteTemplate(
+			w,
+			"index.html.tmpl",
+			indexData{stats, middlewareStats, renderedConfig},
+		)
 		if err != nil {
 			hlog.FromRequest(r).Panic().Err(err).Msg("error sending the index.html")
 		}

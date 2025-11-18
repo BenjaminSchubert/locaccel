@@ -1,5 +1,6 @@
 table {
     border-collapse: collapse;
+    margin-bottom: 1em;
 }
 
 th, td {
@@ -7,7 +8,7 @@ th, td {
     padding: .2em;
 }
 
-#statistics td:nth-child(2), #breakdown td:nth-child(2) {
+#components td:nth-child(2), #breakdown td:nth-child(2) {
     text-align: right;
 }
 

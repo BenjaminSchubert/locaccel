@@ -45,10 +45,17 @@ func getAdminServer(t *testing.T) (*httptest.Server, *httpclient.Cache) {
 			handler,
 			cache,
 			config.Default(func(s string) (string, bool) { return "", false }),
+			&middleware.Statistics{},
 		),
 	)
 	server := httptest.NewServer(
-		middleware.ApplyAllMiddlewares(handler, "admin", logger, prometheus.NewPedanticRegistry()),
+		middleware.ApplyAllMiddlewares(
+			handler,
+			"admin",
+			logger,
+			prometheus.NewPedanticRegistry(),
+			&middleware.Statistics{},
+		),
 	)
 	t.Cleanup(server.Close)
 

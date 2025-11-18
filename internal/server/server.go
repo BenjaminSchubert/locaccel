@@ -47,50 +47,57 @@ func New(
 		prometheus.Registerer
 		prometheus.Gatherer
 	},
+	statistics *middleware.Statistics,
 ) *Server {
 	srv := Server{logger: logger}
 
 	for _, proxy := range conf.GoProxies {
 		srv.servers = append(
 			srv.servers,
-			setupGoProxy(conf, proxy, client, logger, metricsRegistry),
+			setupGoProxy(conf, proxy, client, logger, metricsRegistry, statistics),
 		)
 	}
 
 	for _, registry := range conf.OciRegistries {
 		srv.servers = append(
 			srv.servers,
-			setupOciRegistry(conf, registry, client, logger, metricsRegistry),
+			setupOciRegistry(conf, registry, client, logger, metricsRegistry, statistics),
 		)
 	}
 
 	for _, registry := range conf.PyPIRegistries {
 		srv.servers = append(
 			srv.servers,
-			setupPypiRegistry(conf, registry, client, logger, metricsRegistry),
+			setupPypiRegistry(conf, registry, client, logger, metricsRegistry, statistics),
 		)
 	}
 
 	for _, registry := range conf.NpmRegistries {
 		srv.servers = append(
 			srv.servers,
-			setupNpmRegistry(conf, registry, client, logger, metricsRegistry),
+			setupNpmRegistry(conf, registry, client, logger, metricsRegistry, statistics),
 		)
 	}
 
 	for _, proxy := range conf.Proxies {
-		srv.servers = append(srv.servers, setupProxy(conf, proxy, client, logger, metricsRegistry))
+		srv.servers = append(
+			srv.servers,
+			setupProxy(conf, proxy, client, logger, metricsRegistry, statistics),
+		)
 	}
 
 	for _, registry := range conf.RubyGemRegistries {
 		srv.servers = append(
 			srv.servers,
-			setupRubyGemRegistry(conf, registry, client, logger, metricsRegistry),
+			setupRubyGemRegistry(conf, registry, client, logger, metricsRegistry, statistics),
 		)
 	}
 
 	if conf.AdminInterface != "" {
-		srv.servers = append(srv.servers, setupAdminInterface(conf, cache, logger, metricsRegistry))
+		srv.servers = append(
+			srv.servers,
+			setupAdminInterface(conf, cache, logger, metricsRegistry, statistics),
+		)
 	} else if conf.EnableProfiling {
 		logger.Warn().Msg("Profiling requested, but the admin interface is disabled. Ignoring.")
 	}
@@ -155,6 +162,7 @@ func setupGoProxy(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	registry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "go[" + goProxy.Upstream + "]"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -174,6 +182,7 @@ func setupGoProxy(
 		serviceName,
 		&log,
 		registry,
+		statistics,
 	)
 }
 
@@ -183,6 +192,7 @@ func setupOciRegistry(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	metricsRegistry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "oci[" + registry.Upstream + "]"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -196,6 +206,7 @@ func setupOciRegistry(
 		serviceName,
 		&log,
 		metricsRegistry,
+		statistics,
 	)
 }
 
@@ -205,6 +216,7 @@ func setupPypiRegistry(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	metricsRegistry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "pypi[" + registry.Upstream + "]"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -224,6 +236,7 @@ func setupPypiRegistry(
 		serviceName,
 		&log,
 		metricsRegistry,
+		statistics,
 	)
 }
 
@@ -233,6 +246,7 @@ func setupNpmRegistry(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	metricsRegistry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "npm[" + registry.Upstream + "]"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -252,6 +266,7 @@ func setupNpmRegistry(
 		serviceName,
 		&log,
 		metricsRegistry,
+		statistics,
 	)
 }
 
@@ -261,6 +276,7 @@ func setupProxy(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	registry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "proxy"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -279,6 +295,7 @@ func setupProxy(
 		serviceName,
 		&log,
 		registry,
+		statistics,
 	)
 }
 
@@ -288,6 +305,7 @@ func setupRubyGemRegistry(
 	client *httpclient.Client,
 	logger *zerolog.Logger,
 	metricsRegistry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "rubygem[" + registry.Upstream + "]"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -306,6 +324,7 @@ func setupRubyGemRegistry(
 		serviceName,
 		&log,
 		metricsRegistry,
+		statistics,
 	)
 }
 
@@ -317,6 +336,7 @@ func setupAdminInterface(
 		prometheus.Registerer
 		prometheus.Gatherer
 	},
+	statistics *middleware.Statistics,
 ) serverInfo {
 	serviceName := "admin"
 	log := logger.With().Str("service", serviceName).Logger()
@@ -340,11 +360,19 @@ func setupAdminInterface(
 
 	}
 
-	if err := admin.RegisterHandler(handler, cache, conf); err != nil {
+	if err := admin.RegisterHandler(handler, cache, conf, statistics); err != nil {
 		logger.Panic().Err(err).Msg("unable to initialize server properly")
 	}
 
-	return createServer(conf.AdminInterface, handler, serviceName, &log, registry)
+	// Create another statistics for the admin interface, we're not interested in counting this here
+	return createServer(
+		conf.AdminInterface,
+		handler,
+		serviceName,
+		&log,
+		registry,
+		&middleware.Statistics{},
+	)
 }
 
 func createServer(
@@ -353,13 +381,20 @@ func createServer(
 	serviceName string,
 	log *zerolog.Logger,
 	registry prometheus.Registerer,
+	statistics *middleware.Statistics,
 ) serverInfo {
 	handler.HandleFunc("/", handlers.NotImplemented)
 
 	return serverInfo{
 		&http.Server{
-			Addr:         address,
-			Handler:      middleware.ApplyAllMiddlewares(handler, serviceName, log, registry),
+			Addr: address,
+			Handler: middleware.ApplyAllMiddlewares(
+				handler,
+				serviceName,
+				log,
+				registry,
+				statistics,
+			),
 			ReadTimeout:  10 * time.Second,
 			WriteTimeout: 5 * time.Minute,
 			ErrorLog:     stdlog.New(log, "", 0),

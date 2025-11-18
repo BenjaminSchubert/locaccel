@@ -71,9 +71,13 @@ func DecodeBytes(value string) (Bytes, error) {
 }
 
 func (b Bytes) String() string {
+	return PrettyBytes(b.Bytes)
+}
+
+func PrettyBytes[T int64 | uint64](b T) string {
 	base := 1024.0
 	i := 0
-	v := float64(b.Bytes)
+	v := float64(b)
 
 	for v >= base && i < len(units) {
 		v /= base
@@ -81,7 +85,7 @@ func (b Bytes) String() string {
 	}
 
 	if i == 0 {
-		return fmt.Sprintf("%dB", b.Bytes)
+		return fmt.Sprintf("%dB", b)
 	}
 	return fmt.Sprintf("%.2f%ciB", v, units[i])
 }
