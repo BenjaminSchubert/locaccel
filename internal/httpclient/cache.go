@@ -307,7 +307,7 @@ func (c *Cache) pruneDatabaseEntry(key []byte, value *database.Entry[CachedRespo
 
 func (c *Cache) ManageCache() {
 	defer c.stopWait.Done()
-	ticker := time.NewTimer(15 * time.Minute)
+	ticker := time.NewTicker(15 * time.Minute)
 	defer ticker.Stop()
 
 	for {
