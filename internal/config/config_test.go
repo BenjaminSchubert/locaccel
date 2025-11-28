@@ -7,6 +7,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/config"
@@ -62,7 +63,7 @@ pypi_registries:
 			AdminInterface:  "localhost:8192",
 			EnableMetrics:   false,
 			EnableProfiling: true,
-			Log:             config.Log{"error", "console"},
+			Log:             config.Log{zerolog.ErrorLevel, "console"},
 			OciRegistries: []config.OciRegistry{
 				{
 					Upstream: "https://registry-1.docker.io",
@@ -85,7 +86,8 @@ func TestCanGetQuotaLow(t *testing.T) {
 
 	dir := t.TempDir()
 
-	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf, err := config.Default(func(s string) (string, bool) { return "", false })
+	require.NoError(t, err)
 	conf.Cache.Path = dir
 	conf.Cache.QuotaLow = units.NewDiskQuotaInBytes(units.Bytes{Bytes: 100})
 
@@ -99,7 +101,8 @@ func TestCanGetQuotaHigh(t *testing.T) {
 
 	dir := t.TempDir()
 
-	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf, err := config.Default(func(s string) (string, bool) { return "", false })
+	require.NoError(t, err)
 	conf.Cache.Path = dir
 	conf.Cache.QuotaHigh = units.NewDiskQuotaInBytes(units.Bytes{Bytes: 100})
 
@@ -114,7 +117,8 @@ func TestGetQuotaReportsProblemOnCachePathInvalid(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Chmod(dir, 0o500)) //nolint:gosec
 
-	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf, err := config.Default(func(s string) (string, bool) { return "", false })
+	require.NoError(t, err)
 	conf.Cache.Path = dir + "/cache"
 
 	quota, err := conf.Cache.GetQuotaHigh()
@@ -132,7 +136,7 @@ func TestReportsCannotReadConfig(t *testing.T) {
 func TestCanSetOverridesViaEnvironment(t *testing.T) {
 	t.Parallel()
 
-	conf := config.Default(func(envvar string) (string, bool) {
+	conf, err := config.Default(func(envvar string) (string, bool) {
 		switch envvar {
 		case "LOCACCEL_ENABLE_PROFILING":
 			return "1", true
@@ -150,6 +154,7 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			return "", false
 		}
 	})
+	require.NoError(t, err)
 
 	require.Equal(
 		t,
@@ -164,7 +169,7 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			AdminInterface:  "0.0.0.0:1000",
 			EnableMetrics:   true,
 			EnableProfiling: true,
-			Log:             config.Log{Level: "debug", Format: "console"},
+			Log:             config.Log{Level: zerolog.DebugLevel, Format: "console"},
 			GoProxies: []config.GoProxy{
 				{
 					Upstream: "https://proxy.golang.org",
@@ -200,4 +205,33 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 		},
 		conf,
 	)
+}
+
+func TestReportsErrorOnInvalidYaml(t *testing.T) {
+	t.Parallel()
+
+	file := path.Join(t.TempDir(), "config.yaml")
+	fp, err := os.Create(file) //nolint:gosec
+	require.NoError(t, err)
+
+	_, err = fp.WriteString("this\n  is not yaml")
+	require.NoError(t, err)
+	require.NoError(t, fp.Close())
+
+	_, err = config.Parse(file, func(s string) (string, bool) { return "", false })
+	require.ErrorContains(t, err, "unmarshal errors")
+}
+
+func TestOverridingLogLevelErrorsOnInvalidLevel(t *testing.T) {
+	t.Parallel()
+
+	_, err := config.Default(func(s string) (string, bool) {
+		switch s {
+		case "LOCACCEL_LOG_LEVEL":
+			return "wrong", true
+		default:
+			return "", false
+		}
+	})
+	require.ErrorContains(t, err, "Unknown Level String")
 }
