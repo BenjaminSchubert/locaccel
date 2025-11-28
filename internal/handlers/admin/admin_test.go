@@ -39,14 +39,12 @@ func getAdminServer(t *testing.T) (*httptest.Server, *httpclient.Cache) {
 		assert.NoError(t, cache.Close())
 	})
 
+	conf, err := config.Default(func(s string) (string, bool) { return "", false })
+	require.NoError(t, err)
+
 	require.NoError(
 		t,
-		admin.RegisterHandler(
-			handler,
-			cache,
-			config.Default(func(s string) (string, bool) { return "", false }),
-			&middleware.Statistics{},
-		),
+		admin.RegisterHandler(handler, cache, conf, &middleware.Statistics{}),
 	)
 	server := httptest.NewServer(
 		middleware.ApplyAllMiddlewares(

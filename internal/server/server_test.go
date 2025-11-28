@@ -15,7 +15,8 @@ func TestServerInitialization(t *testing.T) {
 
 	logger := testutils.TestLogger(t)
 
-	conf := config.Default(func(s string) (string, bool) { return "", false })
+	conf, err := config.Default(func(s string) (string, bool) { return "", false })
+	require.NoError(t, err)
 	conf.EnableProfiling = true
 	srv := New(conf, nil, nil, logger, nil, &middleware.Statistics{})
 

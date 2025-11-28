@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -43,17 +45,16 @@ func main() {
 
 	conf, err := config.Parse(configPath, os.LookupEnv)
 	if err != nil {
-		if configPathSet {
+		if configPathSet || !errors.Is(err, fs.ErrNotExist) {
 			panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
 		}
-		conf = config.Default(os.LookupEnv)
+		conf, err = config.Default(os.LookupEnv)
+		if err != nil {
+			panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
+		}
 	}
 
-	logLevel, err := zerolog.ParseLevel(conf.Log.Level)
-	if err != nil {
-		panicLogger.Fatal().Err(err).Msg("Unable to start server: invalid configuration")
-	}
-	logger, err := logging.CreateLogger(logLevel, conf.Log.Format, os.Stderr)
+	logger, err := logging.CreateLogger(conf.Log.Level, conf.Log.Format, os.Stderr)
 	if err != nil {
 		panicLogger.Fatal().Err(err).Msg("Unable to initialize logger")
 	}

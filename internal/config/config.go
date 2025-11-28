@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -49,7 +50,7 @@ type RubyGemRegistry struct {
 }
 
 type Log struct {
-	Level  string
+	Level  zerolog.Level
 	Format string
 }
 
@@ -107,7 +108,7 @@ func getBaseConfig(envLookup func(string) (string, bool)) *Config {
 		},
 		AdminInterface: "localhost:3130",
 		EnableMetrics:  true,
-		Log:            Log{zerolog.LevelInfoValue, "json"},
+		Log:            Log{zerolog.InfoLevel, "json"},
 	}
 }
 
@@ -122,12 +123,15 @@ func Parse(configPath string, envLookup func(string) (string, bool)) (*Config, e
 	decoder := yaml.NewDecoder(fp)
 	decoder.KnownFields(true)
 	err = decoder.Decode(&c)
+	if err != nil {
+		return c, err
+	}
 
-	applyOverrides(c, envLookup)
+	err = applyOverrides(c, envLookup)
 	return c, err
 }
 
-func Default(envLookup func(string) (string, bool)) *Config {
+func Default(envLookup func(string) (string, bool)) (*Config, error) {
 	conf := getBaseConfig(envLookup)
 	conf.GoProxies = []GoProxy{
 		{"https://proxy.golang.org", "https://sum.golang.org/", 3143, nil},
@@ -158,17 +162,21 @@ func Default(envLookup func(string) (string, bool)) *Config {
 		{"https://rubygems.org", 3146, nil},
 	}
 
-	applyOverrides(conf, envLookup)
-	return conf
+	err := applyOverrides(conf, envLookup)
+	return conf, err
 }
 
-func applyOverrides(conf *Config, envLookup func(string) (string, bool)) {
+func applyOverrides(conf *Config, envLookup func(string) (string, bool)) error {
 	if val, ok := envLookup("LOCACCEL_ENABLE_PROFILING"); ok && val == "1" {
 		conf.EnableProfiling = true
 	}
 
 	if val, ok := envLookup("LOCACCEL_LOG_LEVEL"); ok {
-		conf.Log.Level = val
+		level, err := zerolog.ParseLevel(val)
+		if err != nil {
+			return fmt.Errorf("invalid LOCACCEL_LOG_LEVEL passed '%s': %w", val, err)
+		}
+		conf.Log.Level = level
 	}
 
 	if val, ok := envLookup("LOCACCEL_LOG_FORMAT"); ok {
@@ -186,4 +194,6 @@ func applyOverrides(conf *Config, envLookup func(string) (string, bool)) {
 	if val, ok := envLookup("LOCACCEL_ADMIN_INTERFACE"); ok {
 		conf.AdminInterface = val
 	}
+
+	return nil
 }
