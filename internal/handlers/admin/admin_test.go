@@ -202,3 +202,24 @@ func TestCanListEntriesPerHostname(t *testing.T) {
 	require.Contains(t, string(body), "<td>http://locaccel.test/admin</td>")
 	require.Contains(t, string(body), "<td>http://locaccel.test/admin2</td>")
 }
+
+func TestRespondsForHealthcheck(t *testing.T) {
+	t.Parallel()
+
+	server, _ := getAdminServer(t)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		server.URL+"/healthcheck",
+		nil,
+	)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, resp.Body.Close())
+	require.NoError(t, err)
+	require.Contains(t, string(data), "healthy")
+}
