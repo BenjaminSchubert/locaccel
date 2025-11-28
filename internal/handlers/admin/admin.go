@@ -54,6 +54,13 @@ func RegisterHandler(
 		return err
 	}
 
+	handler.HandleFunc("GET /healthcheck", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("healthy")); err != nil {
+			hlog.FromRequest(r).Panic().Err(err).Msg("error returning an answer")
+		}
+	})
+
 	handler.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 
 	handler.HandleFunc("GET /hostname/{hostname}", func(w http.ResponseWriter, r *http.Request) {
