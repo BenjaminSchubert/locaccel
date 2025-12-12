@@ -90,7 +90,7 @@ func startServer(conf *config.Config, logger *zerolog.Logger) {
 		prometheus.Gatherer
 	}
 	if conf.EnableMetrics {
-		registry := prometheus.NewRegistry()
+		registry = prometheus.NewRegistry()
 		registry.MustRegister(
 			collectors.NewGoCollector(),
 			collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
