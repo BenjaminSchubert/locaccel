@@ -15,6 +15,7 @@ type Statistics struct {
 	CacheHits       atomic.Uint64
 	CacheMisses     atomic.Uint64
 	UnCacheable     atomic.Uint64
+	Revalidated     atomic.Uint64
 	BytesServed     atomic.Uint64
 	BytesDownloaded atomic.Uint64
 }

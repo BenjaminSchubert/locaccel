@@ -28,6 +28,10 @@
                                 <td>{{ .MiddlewareStats.CacheHits.Load }}</td>
                             </tr>
                             <tr>
+                                <td>Revalidated</td>
+                                <td>{{ .MiddlewareStats.Revalidated.Load }}</td>
+                            </tr>
+                            <tr>
                                 <td>Misses</td>
                                 <td>{{ .MiddlewareStats.CacheMisses.Load }}</td>
                             </tr>

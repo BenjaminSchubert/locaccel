@@ -59,6 +59,8 @@ func newLoggingMiddleware(
 		case "miss":
 			statistics.CacheMisses.Add(1)
 			statistics.BytesDownloaded.Add(uint64(size))
+		case "revalidated":
+			statistics.Revalidated.Add(1)
 		default:
 			panic("Unexpected cache state: " + cacheState)
 		}
