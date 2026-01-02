@@ -3,13 +3,13 @@ module github.com/benjaminschubert/locaccel
 go 1.24.2
 
 require (
-	github.com/dgraph-io/badger/v4 v4.8.0
+	github.com/dgraph-io/badger/v4 v4.9.0
 	github.com/dgraph-io/ristretto/v2 v2.3.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/xid v1.6.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
-	github.com/tinylib/msgp v1.6.1
+	github.com/tinylib/msgp v1.6.3
 	github.com/zeebo/blake3 v0.2.4
 	gopkg.in/yaml.v3 v3.0.1
 )
