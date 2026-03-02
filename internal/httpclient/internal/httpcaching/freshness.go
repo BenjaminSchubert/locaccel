@@ -33,7 +33,9 @@ func getFreshnessLifetime(
 		} else {
 			date, err := http.ParseTime(headers.Get("Date"))
 			if err != nil {
-				logger.Error().Err(err).Msg("BUG: Date header is in an invalid format, which should not happen")
+				logger.Error().
+					Err(err).
+					Msg("BUG: Date header is in an invalid format, which should not happen")
 			} else {
 				return expiry.Sub(date)
 			}
@@ -49,7 +51,9 @@ func getFreshnessLifetime(
 			if err == nil {
 				return date.Sub(modified) / 10
 			}
-			logger.Error().Err(err).Msg("BUG: Date header is in an invalid format, which should not happen")
+			logger.Error().
+				Err(err).
+				Msg("BUG: Date header is in an invalid format, which should not happen")
 		}
 	}
 	return 0

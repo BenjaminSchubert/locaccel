@@ -314,7 +314,7 @@ func (c *Client) addConditionalRequestInformation(
 	dbEntry *database.Entry[CachedResponses],
 ) (hasConditionalInformation, wasOriginalRequestConditional bool) {
 	etags := []string{}
-	lastModified := []string{}
+	lastModified := make([]string, 0, 1)
 
 	originalIfNoneMatch := req.Header["If-None-Match"]
 	originalIfModifiedSince := req.Header["If-Modified-Since"]
@@ -418,7 +418,7 @@ func (c *Client) forwardRequest(
 		Msg("Sending request to upstream")
 
 	timeAtRequestCreated = c.now().UTC()
-	resp, err = c.client.Do(req)
+	resp, err = c.client.Do(req) //nolint:gosec
 	timeAtResponseReceived = c.now().UTC()
 
 	if err != nil {

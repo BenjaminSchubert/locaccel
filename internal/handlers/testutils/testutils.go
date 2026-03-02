@@ -220,7 +220,7 @@ func Execute(tb testing.TB, name string, arg ...string) {
 	ctx, cancel := context.WithTimeout(baseCtx, 5*time.Minute)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...) //nolint:gosec
 
 	output, err := cmd.CombinedOutput()
 	displayCmd := strings.Join(append([]string{name}, arg...), " ")

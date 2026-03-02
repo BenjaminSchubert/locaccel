@@ -67,7 +67,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 		require.NoError(b, err)
 		req.Header.Add("Accept", "application/vnd.npm.install-v1+json")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req) //nolint:gosec
 		require.NoError(b, err)
 
 		npmInfo, err = io.ReadAll(resp.Body)

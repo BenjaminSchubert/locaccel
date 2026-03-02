@@ -134,7 +134,9 @@ func ParseCacheControlDirective(
 				case "immutable":
 					response.Immutable = true
 				default:
-					logger.Warn().Str("directive", directive).Msg("received an unknown directive in Cache-Control header")
+					logger.Warn().
+						Str("directive", directive).
+						Msg("received an unknown directive in Cache-Control header")
 				}
 			}
 		}
