@@ -26,7 +26,9 @@ func RegisterHandler(
 	handler.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := hostnames[r.Host]; !ok {
 			w.WriteHeader(http.StatusForbidden)
-			if _, err := w.Write([]byte("The server cannot authorize proxying to the requested upstream")); err != nil {
+			if _, err := w.Write(
+				[]byte("The server cannot authorize proxying to the requested upstream"),
+			); err != nil {
 				hlog.FromRequest(r).
 					Panic().
 					Err(err).

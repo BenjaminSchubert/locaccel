@@ -203,7 +203,7 @@ func BenchmarkProxy(b *testing.B) {
 	require.NoError(b, err)
 
 	for b.Loop() {
-		resp, err := client.Do(req)
+		resp, err := client.Do(req) //nolint:gosec
 		require.NoError(b, err)
 		require.Equal(b, http.StatusOK, resp.StatusCode)
 		_, err = io.Copy(io.Discard, resp.Body)

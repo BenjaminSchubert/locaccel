@@ -93,7 +93,11 @@ func Forward(
 	buf := bufferPool.Get().(*[]byte)
 	defer bufferPool.Put(buf)
 
-	if _, err := io.CopyBuffer(struct{ io.Writer }{w}, struct{ io.Reader }{resp.Body}, *buf); err != nil {
+	if _, err := io.CopyBuffer(
+		struct{ io.Writer }{w},
+		struct{ io.Reader }{resp.Body},
+		*buf,
+	); err != nil {
 		hlog.FromRequest(r).Panic().Err(err).Msg("Error sending response to client")
 	}
 }
