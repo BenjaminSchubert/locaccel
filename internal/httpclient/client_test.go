@@ -315,7 +315,7 @@ func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 		clock.Advance()
 		w.Header().Add("Cache-Control", "public, max-age=30")
 		w.Header().Add("Vary", "Count")
-		_, err := w.Write(fmt.Appendf(nil, "Hello %s!", r.Header.Get("Count")))
+		_, err := w.Write(fmt.Appendf(nil, "Hello %s!", r.Header.Get("Count"))) //nolint:gosec
 		assert.NoError(t, err)
 	}))
 	t.Cleanup(srv.Close)

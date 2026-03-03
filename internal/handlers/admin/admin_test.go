@@ -67,7 +67,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(resp.Body)
@@ -88,7 +88,7 @@ func TestDeletingUnknownKeysReturnProperError(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	require.NoError(t, resp.Body.Close())
@@ -108,7 +108,7 @@ func TestCanDeleteKeyWithNoFileSavedAnymore(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	require.NoError(t, resp.Body.Close())
@@ -144,7 +144,7 @@ func TestCanDeleteKey(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	require.NoError(t, resp.Body.Close())
@@ -191,7 +191,7 @@ func TestCanListEntriesPerHostname(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
@@ -215,7 +215,7 @@ func TestRespondsForHealthcheck(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	resp, err := server.Client().Do(req)
+	resp, err := server.Client().Do(req) //nolint:gosec
 	require.NoError(t, err)
 
 	data, err := io.ReadAll(resp.Body)
