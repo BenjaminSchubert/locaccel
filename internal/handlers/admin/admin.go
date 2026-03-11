@@ -15,6 +15,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
 	"github.com/benjaminschubert/locaccel/internal/units"
+	"github.com/benjaminschubert/locaccel/internal/version"
 )
 
 //go:embed templates
@@ -24,6 +25,7 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 type indexData struct {
+	Version         string
 	CacheStats      httpclient.CacheStatistics
 	MiddlewareStats *middleware.Statistics
 	Conf            string
@@ -116,7 +118,7 @@ func RegisterHandler(
 		err = templates.ExecuteTemplate(
 			w,
 			"index.html.tmpl",
-			indexData{stats, middlewareStats, renderedConfig},
+			indexData{version.Get(), stats, middlewareStats, renderedConfig},
 		)
 		if err != nil {
 			hlog.FromRequest(r).Panic().Err(err).Msg("error sending the index.html")

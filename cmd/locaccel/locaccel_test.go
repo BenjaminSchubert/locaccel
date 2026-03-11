@@ -9,12 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCanGetVersion(t *testing.T) {
-	t.Parallel()
-
-	require.Equal(t, "(devel)", getVersion())
-}
-
 func TestCanLoadSpecifiedConfig(t *testing.T) {
 	t.Parallel()
 
