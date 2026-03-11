@@ -627,78 +627,119 @@ func TestValidationLastModified(t *testing.T) {
 func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 	t.Parallel()
 
-	client, clock, _, validateQueries := setup(t)
+	for _, tc := range []struct {
+		status      int
+		description string
+	}{
+		{http.StatusGatewayTimeout, "ifDisconnected"},
+		{http.StatusTooManyRequests, "ifRateLimited"},
+	} {
+		t.Run(tc.description, func(t *testing.T) {
+			t.Parallel()
 
-	wasCalled := false
+			client, clock, _, validateQueries := setup(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if wasCalled {
-			w.WriteHeader(http.StatusGatewayTimeout)
-			return
-		}
+			wasCalled := false
 
-		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
-		clock.Advance()
-		w.Header().Add("Cache-Control", "public, max-age=0")
-		_, err := w.Write([]byte("Hello!"))
-		assert.NoError(t, err)
-		wasCalled = true
-	}))
-	t.Cleanup(srv.Close)
+			srv := httptest.NewServer(
+				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if wasCalled {
+						w.WriteHeader(tc.status)
+						return
+					}
 
-	// Initial Query
-	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+					w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+					clock.Advance()
+					w.Header().Add("Cache-Control", "public, max-age=0")
+					_, err := w.Write([]byte("Hello!"))
+					assert.NoError(t, err)
+					wasCalled = true
+				}),
+			)
+			t.Cleanup(srv.Close)
 
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, "Hello!", body)
-	assert.Equal(
-		t,
-		http.Header{
-			"Cache-Control":  []string{"public, max-age=0"},
-			"Content-Length": []string{"6"},
-			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
-		},
-		resp.Header,
-	)
+			// Initial Query
+			resp, body := makeRequest( //nolint:bodyclose
+				t,
+				client,
+				http.MethodGet,
+				srv.URL,
+				nil,
+				nil,
+			)
 
-	// Second query getting a 5XX, should be served by the cache
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, "Hello!", body)
-	assert.Equal(
-		t,
-		http.Header{
-			"Age":            []string{"1"},
-			"Cache-Control":  []string{"public, max-age=0"},
-			"Content-Length": []string{"6"},
-			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           []string{clock.Now().Add(-time.Second).Format(http.TimeFormat)},
-		},
-		resp.Header,
-	)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, "Hello!", body)
+			assert.Equal(
+				t,
+				http.Header{
+					"Cache-Control":  []string{"public, max-age=0"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+				},
+				resp.Header,
+			)
 
-	clock.Advance()
+			// Second query getting a 5XX, should be served by the cache
+			resp, body = makeRequest( //nolint:bodyclose
+				t,
+				client,
+				http.MethodGet,
+				srv.URL,
+				nil,
+				nil,
+			)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, "Hello!", body)
+			assert.Equal(
+				t,
+				http.Header{
+					"Age":            []string{"1"},
+					"Cache-Control":  []string{"public, max-age=0"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-time.Second).Format(http.TimeFormat),
+					},
+				},
+				resp.Header,
+			)
 
-	// Third Query, should still be served by the cache
-	srv.Close()
+			clock.Advance()
 
-	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
-	assert.Equal(t, 200, resp.StatusCode)
-	assert.Equal(t, "Hello!", body)
-	assert.Equal(
-		t,
-		http.Header{
-			"Age":            []string{"2"},
-			"Cache-Control":  []string{"public, max-age=0"},
-			"Content-Length": []string{"6"},
-			"Content-Type":   []string{"text/plain; charset=utf-8"},
-			"Date":           []string{clock.Now().Add(-2 * time.Second).Format(http.TimeFormat)},
-		},
-		resp.Header,
-	)
+			// Third Query, should still be served by the cache
+			srv.Close()
 
-	validateQueries([]string{"miss", "hit", "hit"})
+			resp, body = makeRequest( //nolint:bodyclose
+				t,
+				client,
+				http.MethodGet,
+				srv.URL,
+				nil,
+				nil,
+			)
+			assert.Equal(t, 200, resp.StatusCode)
+			assert.Equal(t, "Hello!", body)
+			assert.Equal(
+				t,
+				http.Header{
+					"Age":            []string{"2"},
+					"Cache-Control":  []string{"public, max-age=0"},
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				resp.Header,
+			)
+
+			validateQueries([]string{"miss", "hit", "hit"})
+		})
+	}
 }
 
 func TestClientTriesUpstreamCachesFirst(t *testing.T) {
