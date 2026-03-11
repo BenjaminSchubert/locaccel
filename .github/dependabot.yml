@@ -2,27 +2,33 @@
 version: 2
 updates:
   - package-ecosystem: gomod
+    assignees:
+      - BenjaminSchubert
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       dependencies:
         patterns:
           - "*"
 
   - package-ecosystem: docker
+    assignees:
+      - BenjaminSchubert
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       dependencies:
         patterns:
           - "*"
 
   - package-ecosystem: github-actions
+    assignees:
+      - BenjaminSchubert
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     groups:
       dependencies:
         patterns:
