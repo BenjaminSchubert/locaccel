@@ -35,6 +35,7 @@ func TestInstallRubyGemPackages(t *testing.T) {
 				"--interactive",
 				"--network=host",
 				"--dns=127.0.0.127",
+				"--env=http_proxy=",
 				"docker.io/ruby:slim",
 				"gem",
 				"install",
