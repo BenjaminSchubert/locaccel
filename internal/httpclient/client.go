@@ -244,6 +244,16 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		}
 		return resp, err
 	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		if dbEntry.Version() != 0 {
+			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
+				logger.Warn().
+					Msg("upstream returned 429 Too Many Requests, serving stale response from cache")
+				c.notify(req, "hit")
+				return cRep, nil
+			}
+		}
+	}
 
 	if hasConditionalInformation && resp.StatusCode == http.StatusNotModified {
 		cacheResp, err := c.updateCache(
