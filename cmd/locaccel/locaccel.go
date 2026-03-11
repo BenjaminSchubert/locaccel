@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"runtime/debug"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,15 +19,8 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/logging"
 	"github.com/benjaminschubert/locaccel/internal/middleware"
 	"github.com/benjaminschubert/locaccel/internal/server"
+	"github.com/benjaminschubert/locaccel/internal/version"
 )
-
-func getVersion() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "<unknown>"
-	}
-	return info.Main.Version
-}
 
 func loadConfig(lookupEnv func(string) (string, bool)) (*config.Config, bool, error) {
 	configPath, configPathSet := lookupEnv("LOCACCEL_CONFIG_PATH")
@@ -50,7 +42,7 @@ func loadConfig(lookupEnv func(string) (string, bool)) (*config.Config, bool, er
 }
 
 func startServer(conf *config.Config, logger *zerolog.Logger) {
-	logger.Info().Str("version", getVersion()).Msg("Running locaccel")
+	logger.Info().Str("version", version.Get()).Msg("Running locaccel")
 
 	client := &http.Client{
 		Timeout: 5 * time.Minute,
