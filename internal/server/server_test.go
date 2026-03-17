@@ -20,7 +20,7 @@ func TestServerInitialization(t *testing.T) {
 	conf.EnableProfiling = true
 	srv := New(conf, nil, nil, logger, nil, &middleware.Statistics{})
 
-	require.Len(t, srv.servers, 10)
+	require.Len(t, srv.servers, 11)
 
 	addresses := make([]string, 0, len(srv.servers))
 	for _, s := range srv.servers {
@@ -29,6 +29,7 @@ func TestServerInitialization(t *testing.T) {
 	require.Equal(
 		t,
 		[]string{
+			"localhost:3147",
 			"localhost:3143",
 			"localhost:3131",
 			"localhost:3132",

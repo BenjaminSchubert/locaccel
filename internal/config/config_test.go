@@ -170,6 +170,9 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			EnableMetrics:   true,
 			EnableProfiling: true,
 			Log:             config.Log{Level: zerolog.DebugLevel, Format: "console"},
+			AnsibleGalaxies: []config.AnsibleGalaxy{
+				{Upstream: "https://galaxy.ansible.com", Port: 3147},
+			},
 			GoProxies: []config.GoProxy{
 				{
 					Upstream: "https://proxy.golang.org",

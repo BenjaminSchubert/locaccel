@@ -10,6 +10,12 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
+type AnsibleGalaxy struct {
+	Upstream       string
+	Port           uint16
+	UpstreamCaches []SerializableURL `yaml:"upstream_caches"`
+}
+
 type GoProxy struct {
 	Upstream       string
 	SumDBURL       string `yaml:"sumdb_url"`
@@ -84,10 +90,11 @@ type Config struct {
 	EnableMetrics     bool   `yaml:"metrics"`
 	EnableProfiling   bool   `yaml:"profiling"`
 	Log               Log
-	GoProxies         []GoProxy      `yaml:"go_proxies"`
-	NpmRegistries     []NpmRegistry  `yaml:"npm_registries"`
-	OciRegistries     []OciRegistry  `yaml:"oci_registries"`
-	PyPIRegistries    []PyPIRegistry `yaml:"pypi_registries"`
+	AnsibleGalaxies   []AnsibleGalaxy `yaml:"ansible_galaxies"`
+	GoProxies         []GoProxy       `yaml:"go_proxies"`
+	NpmRegistries     []NpmRegistry   `yaml:"npm_registries"`
+	OciRegistries     []OciRegistry   `yaml:"oci_registries"`
+	PyPIRegistries    []PyPIRegistry  `yaml:"pypi_registries"`
 	Proxies           []Proxy
 	RubyGemRegistries []RubyGemRegistry `yaml:"rubygem_registries"`
 }
@@ -133,6 +140,9 @@ func Parse(configPath string, envLookup func(string) (string, bool)) (*Config, e
 
 func Default(envLookup func(string) (string, bool)) (*Config, error) {
 	conf := getBaseConfig(envLookup)
+	conf.AnsibleGalaxies = []AnsibleGalaxy{
+		{"https://galaxy.ansible.com", 3147, nil},
+	}
 	conf.GoProxies = []GoProxy{
 		{"https://proxy.golang.org", "https://sum.golang.org/", 3143, nil},
 	}
