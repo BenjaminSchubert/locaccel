@@ -72,9 +72,8 @@ func Forward(
 		}
 	}()
 
-	maps.Copy(w.Header(), resp.Header)
-
 	if resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp) {
+		maps.Copy(w.Header(), resp.Header)
 		w.WriteHeader(http.StatusNotModified)
 		return
 	}
@@ -88,17 +87,22 @@ func Forward(
 		}
 	}
 
+	maps.Copy(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
 	buf := bufferPool.Get().(*[]byte)
 	defer bufferPool.Put(buf)
 
-	if _, err := io.CopyBuffer(
+	if n, err := io.CopyBuffer(
 		struct{ io.Writer }{w},
 		struct{ io.Reader }{resp.Body},
 		*buf,
 	); err != nil {
-		hlog.FromRequest(r).Panic().Err(err).Msg("Error sending response to client")
+		hlog.FromRequest(r).
+			Panic().
+			Err(err).
+			Int64("written", n).
+			Msg("Error sending response to client")
 	}
 }
 
