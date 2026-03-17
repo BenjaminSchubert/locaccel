@@ -112,3 +112,16 @@ env = [
     "GOPROXY=http://host.containers.internal:3143",
     "GOSUMDB=sum.golang.org http://host.containers.internal:3143",
 ]
+
+
+### Ansible Galaxy
+
+Ansible only uses the first configuration file it finds. As such, it is easier
+to configure the galaxy server via environment variable:
+
+```toml
+[containers]
+env = [
+    "ANSIBLE_GALAXY_SERVER=http://host.containers.internal:3147"
+]
+```

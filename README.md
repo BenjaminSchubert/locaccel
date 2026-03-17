@@ -32,6 +32,7 @@ with still only one cache reaching out to the Internet.
 - Ruby Gems
 - Container registries (Docker Hub, GitHub Container Registry, Google Container Registry, Quay, …)
 - Generic HTTP proxy – works for Debian/Ubuntu package mirrors and any other HTTP‑based source.
+- Ansible Galaxy
 
 Is there another registry type you'd like supported? Open an issue or
 [contribute](./CONTRIBUTING.md)!
@@ -87,6 +88,8 @@ docker run \
   --publish 3145:3145 \
   # For rubygems.org
   --publish 3146:3146 \
+  # For galaxy.ansible.com
+  --publish 3147:3147 \
   ghcr.io/benjaminschubert/locaccel
 ```
 
@@ -163,6 +166,17 @@ metrics: true
 # Whether to enable profiling or not. If enabled, profiling endpoints will be
 # available under <admin_interface>/-/pprof/
 profiling: false
+
+# Configures a list of proxies for ansible galaxy services
+ansible_galaxies:
+      # The upstream galaxy deployment
+    - upstream: https://galaxy.ansible.com
+      # The port on which to expose the cache locally
+      port: 3147
+      # Optionally, a list of urls pointing to optional caches, that are going
+      # to be tried first before hitting the upstream. This allows for chaining
+      # caches or build a mesh in order to more efficiently reduce downloads
+      upstream_caches: []
 
 # Configures a list of proxies for Go modules
 go_proxies:
@@ -323,6 +337,21 @@ Acquire::https::Proxy "http://<locaccel-url>:<proxy port>/";
 #### Podman (OCI)
 
 See [the full docs](./docs/ecosystems/podman.md)
+
+#### Ansible Galaxy
+
+In ansible.cfg, set
+
+```ini
+[galaxy]
+server = http://<locaccel-url>:<galaxy-port>
+```
+
+Or by environment variable:
+
+```
+ANSIBLE_GALAXY_SERVER="http://<locaccel-url>:<galaxy-port>"
+```
 
 
 ## Contributing

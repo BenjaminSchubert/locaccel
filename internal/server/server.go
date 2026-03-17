@@ -19,6 +19,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/config"
 	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/admin"
+	"github.com/benjaminschubert/locaccel/internal/handlers/galaxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/goproxy"
 	"github.com/benjaminschubert/locaccel/internal/handlers/npm"
 	"github.com/benjaminschubert/locaccel/internal/handlers/oci"
@@ -52,6 +53,12 @@ func New(
 ) *Server {
 	srv := Server{logger: logger}
 
+	for _, proxy := range conf.AnsibleGalaxies {
+		srv.servers = append(
+			srv.servers,
+			setupGalaxy(conf, proxy, client, logger, metricsRegistry, statistics),
+		)
+	}
 	for _, proxy := range conf.GoProxies {
 		srv.servers = append(
 			srv.servers,
@@ -155,6 +162,35 @@ func (s *Server) ListenAndServe() error {
 	}
 
 	return lastErr
+}
+
+func setupGalaxy(
+	conf *config.Config,
+	ansibleGalaxy config.AnsibleGalaxy,
+	client *httpclient.Client,
+	logger *zerolog.Logger,
+	registry prometheus.Registerer,
+	statistics *middleware.Statistics,
+) serverInfo {
+	serviceName := "galaxy[" + ansibleGalaxy.Upstream + "]"
+	log := logger.With().Str("service", serviceName).Logger()
+
+	handler := http.NewServeMux()
+	galaxy.RegisterHandler(
+		ansibleGalaxy.Upstream,
+		handler,
+		client,
+		asURLs(ansibleGalaxy.UpstreamCaches),
+	)
+
+	return createServer(
+		fmt.Sprintf("%s:%d", conf.Host, ansibleGalaxy.Port),
+		handler,
+		serviceName,
+		&log,
+		registry,
+		statistics,
+	)
 }
 
 func setupGoProxy(
