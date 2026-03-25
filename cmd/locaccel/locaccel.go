@@ -183,7 +183,7 @@ func main() {
 		getPanicLogger().Fatal().Err(err).Msg("Error initializing logger")
 	}
 
-	if !configNotExist {
+	if configNotExist {
 		logger.Info().
 			Msg("locaccel.yaml not found and LOCACCEL_CONFIG_PATH not set: Using default configuration")
 	}
