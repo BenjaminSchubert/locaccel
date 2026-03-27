@@ -83,6 +83,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 					)
 				},
 				false,
+				0,
 			)
 		})
 	}

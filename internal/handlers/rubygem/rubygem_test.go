@@ -44,5 +44,6 @@ func TestInstallRubyGemPackages(t *testing.T) {
 			)
 		},
 		true,
+		0,
 	)
 }

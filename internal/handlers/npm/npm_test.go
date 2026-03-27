@@ -48,11 +48,11 @@ func TestInstallNpmPackages(t *testing.T) {
 				"--dry-run",
 				"--loglevel",
 				"silly",
-				"react",
 				"@npmcli/promise-spawn",
 			)
 		},
 		true,
+		1,
 	)
 }
 
