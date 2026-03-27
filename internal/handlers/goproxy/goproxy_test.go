@@ -57,5 +57,6 @@ func TestInstallGoPackages(t *testing.T) {
 			)
 		},
 		true,
+		0,
 	)
 }

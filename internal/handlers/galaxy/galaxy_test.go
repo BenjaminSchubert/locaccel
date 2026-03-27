@@ -62,5 +62,6 @@ func TestInstallGalaxyPackages(t *testing.T) {
 			)
 		},
 		false,
+		0,
 	)
 }
