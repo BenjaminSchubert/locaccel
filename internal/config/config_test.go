@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,8 @@ cache:
   quota_low: 1
   quota_high: 10
 admin_interface: localhost:8192
+http:
+  timeout: 10s
 metrics: false
 profiling: true
 log:
@@ -63,6 +66,7 @@ pypi_registries:
 			AdminInterface:  "localhost:8192",
 			EnableMetrics:   false,
 			EnableProfiling: true,
+			HTTPClient:      config.HTTPClient{10 * time.Second},
 			Log:             config.Log{zerolog.ErrorLevel, "console"},
 			OciRegistries: []config.OciRegistry{
 				{
@@ -169,6 +173,7 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			AdminInterface:  "0.0.0.0:1000",
 			EnableMetrics:   true,
 			EnableProfiling: true,
+			HTTPClient:      config.HTTPClient{5 * time.Minute},
 			Log:             config.Log{Level: zerolog.DebugLevel, Format: "console"},
 			AnsibleGalaxies: []config.AnsibleGalaxy{
 				{Upstream: "https://galaxy.ansible.com", Port: 3147},
