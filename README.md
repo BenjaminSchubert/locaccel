@@ -145,6 +145,10 @@ cache:
     # See `quota_high` for acceptable values
     quota_low: 10%
 
+http:
+  # How long a request to upstream can take at maximum
+  timeout: 5m
+
 log:
     # The level at which to log
     # Acceptable values are `trace`, `debug`, `info`, `warn`, `error`, `panic`

@@ -45,7 +45,7 @@ func startServer(conf *config.Config, logger *zerolog.Logger) {
 	logger.Info().Str("version", version.Get()).Msg("Running locaccel")
 
 	client := &http.Client{
-		Timeout: 5 * time.Minute,
+		Timeout: conf.HTTPClient.Timeout,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/rs/zerolog"
 	"gopkg.in/yaml.v3"
@@ -67,6 +68,10 @@ type Cache struct {
 	QuotaHigh units.DiskQuota `yaml:"quota_high"`
 }
 
+type HTTPClient struct {
+	Timeout time.Duration
+}
+
 func getQuota(path string, quota units.DiskQuota) (units.Bytes, error) {
 	err := os.MkdirAll(path, 0o750)
 	if err != nil {
@@ -86,9 +91,10 @@ func (c Cache) GetQuotaHigh() (units.Bytes, error) {
 type Config struct {
 	Host              string
 	Cache             Cache
-	AdminInterface    string `yaml:"admin_interface"`
-	EnableMetrics     bool   `yaml:"metrics"`
-	EnableProfiling   bool   `yaml:"profiling"`
+	HTTPClient        HTTPClient `yaml:"http"`
+	AdminInterface    string     `yaml:"admin_interface"`
+	EnableMetrics     bool       `yaml:"metrics"`
+	EnableProfiling   bool       `yaml:"profiling"`
 	Log               Log
 	AnsibleGalaxies   []AnsibleGalaxy `yaml:"ansible_galaxies"`
 	GoProxies         []GoProxy       `yaml:"go_proxies"`
@@ -115,6 +121,7 @@ func getBaseConfig(envLookup func(string) (string, bool)) *Config {
 		},
 		AdminInterface: "localhost:3130",
 		EnableMetrics:  true,
+		HTTPClient:     HTTPClient{5 * time.Minute},
 		Log:            Log{zerolog.InfoLevel, "json"},
 	}
 }
