@@ -8,6 +8,7 @@ type TeeReader struct {
 	onClose      func(totalRead int, readErr, writeErr error) error
 	lastReadErr  error
 	lastWriteErr error
+	hasError     bool
 	totalRead    int
 }
 
@@ -20,7 +21,7 @@ func New(
 }
 
 func (t *TeeReader) Read(p []byte) (int, error) {
-	if t.lastWriteErr != nil || t.lastReadErr != nil {
+	if t.hasError {
 		n, err := t.src.Read(p)
 		t.totalRead += n
 		return n, err
@@ -28,11 +29,13 @@ func (t *TeeReader) Read(p []byte) (int, error) {
 
 	n, readErr := t.src.Read(p)
 	if readErr != nil && readErr != io.EOF {
+		t.hasError = true
 		t.lastReadErr = readErr
 	}
 
 	if n > 0 {
 		if _, writeErr := t.dest.Write(p[:n]); writeErr != nil {
+			t.hasError = true
 			t.lastWriteErr = writeErr
 		}
 	}
