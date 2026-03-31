@@ -64,7 +64,7 @@ func Forward(
 	body := resp.Body
 
 	defer func() {
-		if body.Close() != nil {
+		if err := body.Close(); err != nil {
 			hlog.FromRequest(r).
 				Panic().
 				Err(err).

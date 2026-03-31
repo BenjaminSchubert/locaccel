@@ -63,7 +63,7 @@ func startServer(conf *config.Config, logger *zerolog.Logger) {
 	}
 	quotaHigh, err := conf.Cache.GetQuotaHigh()
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Unable to get low quota for the cache.")
+		logger.Fatal().Err(err).Msg("Unable to get high quota for the cache.")
 	}
 
 	cache, err := httpclient.NewCache(conf.Cache.Path, quotaLow, quotaHigh, logger)
