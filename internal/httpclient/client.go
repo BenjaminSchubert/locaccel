@@ -184,6 +184,25 @@ func (c *Client) serveFromCache(
 	return c.serveFromCachedCandidates(candidates, forceStale, logger)
 }
 
+func readAndCloseUpstreamBody(resp *http.Response, logger *zerolog.Logger) {
+	n, err := io.Copy(io.Discard, resp.Body)
+	cErr := resp.Body.Close()
+
+	if err != nil { //nolint:gocritic
+		logger.Warn().
+			Int64("read", n).
+			Err(err).
+			Msg("An error occured draining a discarded upstream response")
+	} else if cErr != nil {
+		logger.Warn().
+			Int64("read", n).
+			Err(cErr).
+			Msg("An error occured closing a discarded upstream response")
+	} else {
+		logger.Debug().Int64("read", n).Msg("Successfully drained upstream message")
+	}
+}
+
 func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Response, error) {
 	logger := hlog.FromRequest(req)
 
@@ -235,6 +254,9 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	if err != nil || resp.StatusCode >= 500 {
 		if dbEntry.Version() != 0 {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
+				if err == nil {
+					go readAndCloseUpstreamBody(resp, logger)
+				}
 				logger.Warn().
 					Err(err).
 					Msg("unable to contact upstream, serving stale response from cache")
@@ -247,6 +269,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	if resp.StatusCode == http.StatusTooManyRequests {
 		if dbEntry.Version() != 0 {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
+				go readAndCloseUpstreamBody(resp, logger)
 				logger.Warn().
 					Msg("upstream returned 429 Too Many Requests, serving stale response from cache")
 				c.notify(req, "hit")
