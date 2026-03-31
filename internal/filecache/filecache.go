@@ -266,7 +266,7 @@ func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles m
 		return 0, nil, err
 	}
 
-	timestampToFiles = make(map[int64][]string, 0)
+	timestampToFiles = make(map[int64][]string, 1000)
 	var fileInfo os.FileInfo
 
 	for _, dir := range dirs {

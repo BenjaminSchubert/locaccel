@@ -28,8 +28,8 @@ func getVaryHeaderNames(headers http.Header) []string {
 }
 
 func normalizeVaryHeaders(headerVal []string) []string {
-	if headerVal == nil {
-		return nil
+	if headerVal == nil || len(headerVal) == 1 {
+		return headerVal
 	}
 	return []string{strings.Join(headerVal, ", ")}
 }

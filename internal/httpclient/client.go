@@ -81,7 +81,7 @@ func (c *Client) selectResponseCandidates(
 	dbEntry *database.Entry[CachedResponses],
 	logger *zerolog.Logger,
 ) CachedResponses {
-	candidates := CachedResponses{}
+	candidates := make(CachedResponses, 0, 1)
 
 	for _, resp := range dbEntry.Value {
 		if httpcaching.MatchVaryHeaders(req.Header, resp.VaryHeaders, logger) {

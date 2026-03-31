@@ -49,9 +49,11 @@ func startServer(conf *config.Config, logger *zerolog.Logger) {
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          20,
+			MaxIdleConns:          100,
 			MaxConnsPerHost:       20,
+			MaxIdleConnsPerHost:   10,
 			IdleConnTimeout:       90 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
