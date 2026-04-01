@@ -442,13 +442,15 @@ func (c *Client) forwardRequest(
 ) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
 	removeHopByHopHeaders(req.Header)
 
-	headers := req.Header.Clone()
-	headers.Del("Authorization")
+	if logger.Trace().Enabled() { //nolint:zerologlint
+		headers := req.Header.Clone()
+		headers.Del("Authorization")
 
-	logger.Trace().
-		Any("headers", headers).
-		Str("method", req.Method).
-		Msg("Sending request to upstream")
+		logger.Trace().
+			Any("headers", headers).
+			Str("method", req.Method).
+			Msg("Sending request to upstream")
+	}
 
 	timeAtRequestCreated = c.now().UTC()
 	resp, err = c.client.Do(req) //nolint:gosec
@@ -459,10 +461,13 @@ func (c *Client) forwardRequest(
 	}
 
 	removeHopByHopHeaders(resp.Header)
-	logger.Trace().
-		Any("headers", resp.Header).
-		Int("status", resp.StatusCode).
-		Msg("Received response from upstream")
+
+	if logger.Trace().Enabled() { //nolint:zerologlint
+		logger.Trace().
+			Any("headers", resp.Header).
+			Int("status", resp.StatusCode).
+			Msg("Received response from upstream")
+	}
 
 	// Ensure the Date header is valid,
 	// as per https://datatracker.ietf.org/doc/html/rfc9110#name-date
