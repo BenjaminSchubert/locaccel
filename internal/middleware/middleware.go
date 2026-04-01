@@ -80,7 +80,7 @@ func newLoggingMiddleware(
 }
 
 func newTraceMiddleware(next http.Handler, logger *zerolog.Logger) http.Handler {
-	if logger.GetLevel() > zerolog.TraceLevel {
+	if !logger.Trace().Enabled() { //nolint:zerologlint
 		logger.Debug().Msg("Tracing disabled, not adding trace middleware")
 		return next
 	}
