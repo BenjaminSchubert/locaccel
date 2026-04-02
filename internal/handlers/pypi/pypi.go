@@ -73,12 +73,12 @@ func RegisterHandler(
 			r,
 			upstream+r.URL.RequestURI(),
 			client,
-			func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) ([]byte, error) {
+			func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 				switch resp.Header.Get("Content-Type") {
 				case "application/vnd.pypi.simple.v1+json":
 					return rewriteJsonV1(body, expectedCDN, encodedCDN, jsonHandler)
 				default:
-					return nil, fmt.Errorf(
+					return fmt.Errorf(
 						"%w: %s",
 						ErrUnknownContentType,
 						resp.Header.Get("Content-Type"),
@@ -108,14 +108,14 @@ func rewriteJsonV1(
 	body []byte,
 	expectedCDN, encodedCDN string,
 	handler *handlers.JSONHandler,
-) ([]byte, error) {
+) error {
 	if _, err := handler.Buffer.Write(body); err != nil {
-		return nil, err
+		return err
 	}
 
 	data := PypiProject{}
 	if err := handler.Decoder.Decode(&data); err != nil {
-		return nil, err
+		return err
 	}
 
 	expectedPrefix := ""
@@ -131,17 +131,17 @@ func rewriteJsonV1(
 				expectedPrefix = encodedCDN
 				encodedCDN = ""
 			default:
-				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
+				return fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
 			}
 		}
 
 		if !strings.HasPrefix(originalUrl, expectedPrefix) {
-			return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
+			return fmt.Errorf("%w for %s", ErrUnexpectedCDN, originalUrl)
 		}
 
 		uri, err := url.Parse(originalUrl)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Rewrite the url to point to here
@@ -153,9 +153,5 @@ func rewriteJsonV1(
 	}
 
 	handler.Buffer.Reset()
-	if err := handler.Encoder.Encode(data); err != nil {
-		return nil, err
-	}
-
-	return handler.Buffer.Bytes(), nil
+	return handler.Encoder.Encode(data)
 }

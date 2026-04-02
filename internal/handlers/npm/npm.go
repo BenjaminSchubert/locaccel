@@ -79,12 +79,12 @@ func RegisterHandler(
 			r,
 			upstream+r.URL.RequestURI(),
 			client,
-			func(body []byte, resp *http.Response, handler *handlers.JSONHandler) ([]byte, error) {
+			func(body []byte, resp *http.Response, handler *handlers.JSONHandler) error {
 				switch resp.Header.Get("Content-Type") {
 				case "application/vnd.npm.install-v1+json":
 					return rewriteJson(body, r, upstream, scheme, upstreamCacheUrls, handler)
 				default:
-					return nil, fmt.Errorf(
+					return fmt.Errorf(
 						"%w: %s",
 						ErrUnknownContentType,
 						resp.Header.Get("Content-Type"),
@@ -102,14 +102,14 @@ func rewriteJson(
 	upstream, scheme string,
 	upstreamCaches []string,
 	handler *handlers.JSONHandler,
-) ([]byte, error) {
+) error {
 	if _, err := handler.Buffer.Write(body); err != nil {
-		return nil, err
+		return err
 	}
 
 	data := NpmProject{}
 	if err := handler.Decoder.Decode(&data); err != nil {
-		return nil, err
+		return err
 	}
 
 	remote := ""
@@ -128,7 +128,7 @@ func rewriteJson(
 			}
 
 			if remote == "" {
-				return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, version.Dist.Tarball)
+				return fmt.Errorf("%w for %s", ErrUnexpectedCDN, version.Dist.Tarball)
 			}
 		}
 
@@ -139,9 +139,5 @@ func rewriteJson(
 	}
 
 	handler.Buffer.Reset()
-	if err := handler.Encoder.Encode(data); err != nil {
-		return nil, err
-	}
-
-	return handler.Buffer.Bytes(), nil
+	return handler.Encoder.Encode(data)
 }

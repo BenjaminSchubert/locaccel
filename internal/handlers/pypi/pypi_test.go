@@ -80,7 +80,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	jsonHandler := handlers.NewJSONHandler()
 
 	for b.Loop() {
-		_, err := rewriteJsonV1(pytestInfo, cdn, encodedCDN, jsonHandler)
+		err := rewriteJsonV1(pytestInfo, cdn, encodedCDN, jsonHandler)
 		require.NoError(b, err)
 		jsonHandler.Buffer.Reset()
 	}

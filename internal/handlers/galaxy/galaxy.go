@@ -53,12 +53,12 @@ func RegisterHandler(
 				r,
 				galaxyServer+r.URL.RequestURI(),
 				client,
-				func(body []byte, resp *http.Response, handler *handlers.JSONHandler) ([]byte, error) {
+				func(body []byte, resp *http.Response, handler *handlers.JSONHandler) error {
 					switch resp.Header.Get("Content-Type") {
 					case "application/json":
 						return rewriteCollectionVersionV3(body, galaxyServer, handler)
 					default:
-						return nil, fmt.Errorf(
+						return fmt.Errorf(
 							"%w: %s",
 							ErrUnknownContentType,
 							resp.Header.Get("Content-Type"),
@@ -78,26 +78,22 @@ func rewriteCollectionVersionV3(
 	body []byte,
 	galaxyServer string,
 	handler *handlers.JSONHandler,
-) ([]byte, error) {
+) error {
 	if _, err := handler.Buffer.Write(body); err != nil {
-		return nil, err
+		return err
 	}
 
 	data := CollectionVersion{}
 	if err := handler.Decoder.Decode(&data); err != nil {
-		return nil, err
+		return err
 	}
 
 	if after, ok := strings.CutPrefix(data.DownloadUrl, galaxyServer); ok {
 		data.DownloadUrl = after
 	} else if data.DownloadUrl[0] != '/' {
-		return nil, fmt.Errorf("%w for %s", ErrUnexpectedCDN, data.DownloadUrl)
+		return fmt.Errorf("%w for %s", ErrUnexpectedCDN, data.DownloadUrl)
 	}
 
 	handler.Buffer.Reset()
-	if err := handler.Encoder.Encode(data); err != nil {
-		return nil, err
-	}
-
-	return handler.Buffer.Bytes(), nil
+	return handler.Encoder.Encode(data)
 }
