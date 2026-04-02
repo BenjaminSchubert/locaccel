@@ -79,10 +79,10 @@ func RegisterHandler(
 			r,
 			upstream+r.URL.RequestURI(),
 			client,
-			func(body []byte, resp *http.Response) ([]byte, error) {
+			func(body []byte, resp *http.Response, handler *handlers.JSONHandler) ([]byte, error) {
 				switch resp.Header.Get("Content-Type") {
 				case "application/vnd.npm.install-v1+json":
-					return rewriteJson(body, r, upstream, scheme, upstreamCacheUrls)
+					return rewriteJson(body, r, upstream, scheme, upstreamCacheUrls, handler)
 				default:
 					return nil, fmt.Errorf(
 						"%w: %s",
@@ -101,11 +101,8 @@ func rewriteJson(
 	r *http.Request,
 	upstream, scheme string,
 	upstreamCaches []string,
+	handler *handlers.JSONHandler,
 ) ([]byte, error) {
-	handler := handlers.JSONHandlerPool.Get().(*handlers.JSONHandler)
-	defer handlers.JSONHandlerPool.Put(handler)
-
-	handler.Buffer.Reset()
 	if _, err := handler.Buffer.Write(body); err != nil {
 		return nil, err
 	}

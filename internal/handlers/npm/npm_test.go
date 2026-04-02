@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 )
@@ -78,8 +79,11 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	r, err := http.NewRequestWithContext(b.Context(), http.MethodGet, "https://locaccel.test", nil)
 	require.NoError(b, err)
 
+	jsonHandler := handlers.NewJSONHandler()
+
 	for b.Loop() {
-		_, err := rewriteJson(npmInfo, r, "https://registry.npmjs.org/", "https", nil)
+		_, err := rewriteJson(npmInfo, r, "https://registry.npmjs.org/", "https", nil, jsonHandler)
 		require.NoError(b, err)
+		jsonHandler.Buffer.Reset()
 	}
 }
