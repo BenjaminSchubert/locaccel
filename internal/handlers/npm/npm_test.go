@@ -82,7 +82,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	jsonHandler := handlers.NewJSONHandler()
 
 	for b.Loop() {
-		_, err := rewriteJson(npmInfo, r, "https://registry.npmjs.org/", "https", nil, jsonHandler)
+		err := rewriteJson(npmInfo, r, "https://registry.npmjs.org/", "https", nil, jsonHandler)
 		require.NoError(b, err)
 		jsonHandler.Buffer.Reset()
 	}

@@ -54,7 +54,7 @@ func Forward(
 	r *http.Request,
 	upstreamURL string,
 	client *httpclient.Client,
-	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) ([]byte, error),
+	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) error,
 	upstreamCache httpclient.UpstreamCache,
 ) {
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
@@ -124,7 +124,7 @@ func Forward(
 func modifyBody(
 	resp *http.Response,
 	r *http.Request,
-	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) ([]byte, error),
+	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) error,
 	buffer *bytes.Buffer,
 ) (err error) {
 	isGzipped := resp.Header.Get("Content-Encoding") == "gzip"
@@ -154,13 +154,12 @@ func modifyBody(
 		jsonHandlerPool.Put(jsonHandler)
 	}()
 
-	newContent, err := modify(content, resp, jsonHandler)
-	if err != nil {
+	if err := modify(content, resp, jsonHandler); err != nil {
 		return err
 	}
 	if isGzipped {
 		writer := gzip.NewWriter(buffer)
-		_, err := writer.Write(newContent)
+		_, err := writer.Write(jsonHandler.Buffer.Bytes())
 		if err != nil {
 			return err
 		}
@@ -168,7 +167,7 @@ func modifyBody(
 			return err
 		}
 	} else {
-		buffer.Write(newContent)
+		buffer.Write(jsonHandler.Buffer.Bytes())
 	}
 
 	if resp.Header["Content-Length"] != nil {
