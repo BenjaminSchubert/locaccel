@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/benjaminschubert/locaccel/internal/handlers"
 	"github.com/benjaminschubert/locaccel/internal/handlers/testutils"
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
 )
@@ -76,8 +77,11 @@ func BenchmarkJSONRewrite(b *testing.B) {
 	cdn := "https://files.pythonhosted.org"
 	encodedCDN := "/cnd/" + base64.StdEncoding.EncodeToString([]byte(cdn))
 
+	jsonHandler := handlers.NewJSONHandler()
+
 	for b.Loop() {
-		_, err := rewriteJsonV1(pytestInfo, cdn, encodedCDN)
+		_, err := rewriteJsonV1(pytestInfo, cdn, encodedCDN, jsonHandler)
 		require.NoError(b, err)
+		jsonHandler.Buffer.Reset()
 	}
 }

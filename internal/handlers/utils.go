@@ -17,19 +17,20 @@ import (
 )
 
 var (
-	JSONHandlerPool = sync.Pool{
+	jsonHandlerPool = sync.Pool{
 		New: func() any {
-			buffer := new(bytes.Buffer)
-			decoder := json.NewDecoder(buffer)
-			decoder.DisallowUnknownFields()
-			encoder := json.NewEncoder(buffer)
-			return &JSONHandler{buffer, decoder, encoder}
+			return NewJSONHandler()
+		},
+	}
+	bytesPool = sync.Pool{
+		New: func() any {
+			buffer := make([]byte, 1024*32)
+			return &buffer
 		},
 	}
 	bufferPool = sync.Pool{
 		New: func() any {
-			buffer := make([]byte, 1024*32)
-			return &buffer
+			return new(bytes.Buffer)
 		},
 	}
 )
@@ -40,12 +41,20 @@ type JSONHandler struct {
 	Encoder *json.Encoder
 }
 
+func NewJSONHandler() *JSONHandler {
+	buffer := new(bytes.Buffer)
+	decoder := json.NewDecoder(buffer)
+	decoder.DisallowUnknownFields()
+	encoder := json.NewEncoder(buffer)
+	return &JSONHandler{buffer, decoder, encoder}
+}
+
 func Forward(
 	w http.ResponseWriter,
 	r *http.Request,
 	upstreamURL string,
 	client *httpclient.Client,
-	modify func(body []byte, resp *http.Response) ([]byte, error),
+	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) ([]byte, error),
 	upstreamCache httpclient.UpstreamCache,
 ) {
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
@@ -54,7 +63,7 @@ func Forward(
 	}
 	maps.Copy(upstreamReq.Header, r.Header)
 
-	resp, err := client.Do(upstreamReq, upstreamCache) //nolint:bodyclose
+	resp, err := client.Do(upstreamReq, upstreamCache)
 	if err != nil {
 		hlog.FromRequest(r).
 			Panic().
@@ -79,7 +88,13 @@ func Forward(
 	}
 
 	if modify != nil {
-		if err := modifyBody(resp, modify); err != nil {
+		buffer := bufferPool.Get().(*bytes.Buffer)
+		defer func() {
+			buffer.Reset()
+			bufferPool.Put(buffer)
+		}()
+
+		if err := modifyBody(resp, r, modify, buffer); err != nil {
 			hlog.FromRequest(r).
 				Panic().
 				Err(err).
@@ -90,8 +105,8 @@ func Forward(
 	maps.Copy(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 
-	buf := bufferPool.Get().(*[]byte)
-	defer bufferPool.Put(buf)
+	buf := bytesPool.Get().(*[]byte)
+	defer bytesPool.Put(buf)
 
 	if n, err := io.CopyBuffer(
 		struct{ io.Writer }{w},
@@ -108,7 +123,9 @@ func Forward(
 
 func modifyBody(
 	resp *http.Response,
-	modify func(body []byte, resp *http.Response) ([]byte, error),
+	r *http.Request,
+	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) ([]byte, error),
+	buffer *bytes.Buffer,
 ) (err error) {
 	isGzipped := resp.Header.Get("Content-Encoding") == "gzip"
 	body := resp.Body
@@ -121,18 +138,27 @@ func modifyBody(
 	}
 
 	content, err := io.ReadAll(body)
+	if cErr := body.Close(); cErr != nil {
+		hlog.FromRequest(r).
+			Error().
+			Err(cErr).
+			Msg("An unexpected error happend trying to close the usptream body")
+	}
 	if err != nil {
 		return err
 	}
 
-	newContent, err := modify(content, resp)
+	jsonHandler := jsonHandlerPool.Get().(*JSONHandler)
+	defer func() {
+		jsonHandler.Buffer.Reset()
+		jsonHandlerPool.Put(jsonHandler)
+	}()
+
+	newContent, err := modify(content, resp, jsonHandler)
 	if err != nil {
 		return err
 	}
-	var buffer *bytes.Buffer
-
 	if isGzipped {
-		buffer = bytes.NewBuffer(nil)
 		writer := gzip.NewWriter(buffer)
 		_, err := writer.Write(newContent)
 		if err != nil {
@@ -142,7 +168,7 @@ func modifyBody(
 			return err
 		}
 	} else {
-		buffer = bytes.NewBuffer(newContent)
+		buffer.Write(newContent)
 	}
 
 	if resp.Header["Content-Length"] != nil {

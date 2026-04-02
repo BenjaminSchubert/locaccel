@@ -33,9 +33,7 @@ func RegisterHandler(
 			r,
 			sumdb+r.URL.RequestURI()[7:],
 			client,
-			func(body []byte, resp *http.Response) ([]byte, error) {
-				return body, nil
-			},
+			nil,
 			sumdbCaches,
 		)
 	})
@@ -46,9 +44,7 @@ func RegisterHandler(
 			r,
 			upstream+r.URL.RequestURI(),
 			client,
-			func(body []byte, resp *http.Response) ([]byte, error) {
-				return body, nil
-			},
+			nil,
 			caches,
 		)
 	})

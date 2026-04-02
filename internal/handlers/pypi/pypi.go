@@ -73,10 +73,10 @@ func RegisterHandler(
 			r,
 			upstream+r.URL.RequestURI(),
 			client,
-			func(body []byte, resp *http.Response) ([]byte, error) {
+			func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) ([]byte, error) {
 				switch resp.Header.Get("Content-Type") {
 				case "application/vnd.pypi.simple.v1+json":
-					return rewriteJsonV1(body, expectedCDN, encodedCDN)
+					return rewriteJsonV1(body, expectedCDN, encodedCDN, jsonHandler)
 				default:
 					return nil, fmt.Errorf(
 						"%w: %s",
@@ -104,11 +104,11 @@ func RegisterHandler(
 	)
 }
 
-func rewriteJsonV1(body []byte, expectedCDN, encodedCDN string) ([]byte, error) {
-	handler := handlers.JSONHandlerPool.Get().(*handlers.JSONHandler)
-	defer handlers.JSONHandlerPool.Put(handler)
-
-	handler.Buffer.Reset()
+func rewriteJsonV1(
+	body []byte,
+	expectedCDN, encodedCDN string,
+	handler *handlers.JSONHandler,
+) ([]byte, error) {
 	if _, err := handler.Buffer.Write(body); err != nil {
 		return nil, err
 	}

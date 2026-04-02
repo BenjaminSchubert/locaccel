@@ -53,10 +53,10 @@ func RegisterHandler(
 				r,
 				galaxyServer+r.URL.RequestURI(),
 				client,
-				func(body []byte, resp *http.Response) ([]byte, error) {
+				func(body []byte, resp *http.Response, handler *handlers.JSONHandler) ([]byte, error) {
 					switch resp.Header.Get("Content-Type") {
 					case "application/json":
-						return rewriteCollectionVersionV3(body, galaxyServer)
+						return rewriteCollectionVersionV3(body, galaxyServer, handler)
 					default:
 						return nil, fmt.Errorf(
 							"%w: %s",
@@ -74,11 +74,11 @@ func RegisterHandler(
 	})
 }
 
-func rewriteCollectionVersionV3(body []byte, galaxyServer string) ([]byte, error) {
-	handler := handlers.JSONHandlerPool.Get().(*handlers.JSONHandler)
-	defer handlers.JSONHandlerPool.Put(handler)
-
-	handler.Buffer.Reset()
+func rewriteCollectionVersionV3(
+	body []byte,
+	galaxyServer string,
+	handler *handlers.JSONHandler,
+) ([]byte, error) {
 	if _, err := handler.Buffer.Write(body); err != nil {
 		return nil, err
 	}
