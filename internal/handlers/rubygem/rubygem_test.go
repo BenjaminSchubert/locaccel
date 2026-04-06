@@ -43,7 +43,7 @@ func TestInstallRubyGemPackages(t *testing.T) {
 				"multi_xml",
 			)
 		},
-		true,
+		false,
 		0,
 		0,
 	)

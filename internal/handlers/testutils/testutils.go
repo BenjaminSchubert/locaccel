@@ -36,15 +36,16 @@ func (o *OfflineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return nil, ErrUnableToContactUpstream
 }
 
-func NewClient(tb testing.TB, logger *zerolog.Logger) *httpclient.Client {
+func NewClient(tb testing.TB, isPrivate bool, logger *zerolog.Logger) *httpclient.Client {
 	tb.Helper()
 
-	client, _ := NewClientWithUnderlyingClient(tb, logger)
+	client, _ := NewClientWithUnderlyingClient(tb, isPrivate, logger)
 	return client
 }
 
 func NewClientWithUnderlyingClient(
 	tb testing.TB,
+	isPrivate bool,
 	logger *zerolog.Logger,
 ) (cachingClient *httpclient.Client, httpClient *http.Client) {
 	tb.Helper()
@@ -77,7 +78,7 @@ func NewClientWithUnderlyingClient(
 		client,
 		cache,
 		logger,
-		false,
+		isPrivate,
 		middleware.SetCacheState,
 		time.Now,
 		time.Since,
@@ -116,7 +117,7 @@ func RunIntegrationTestsForHandler(
 	handlerName string,
 	registerHandler func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL),
 	test func(t *testing.T, serverURL string),
-	supportsOfflineMode bool,
+	needsPrivateCache bool,
 	expectedCacheHitsOnInitialQuery uint64,
 	expectedDeltaBetweenCacheHitsOnCachedQueryAndcacheMisses int64,
 ) {
@@ -137,7 +138,7 @@ func RunIntegrationTestsForHandler(
 			if useUpstreamCache {
 				upstreamLogger := logger.With().Str("type", "upstream").Logger()
 				handler := &http.ServeMux{}
-				registerHandler(handler, NewClient(t, &upstreamLogger), nil)
+				registerHandler(handler, NewClient(t, needsPrivateCache, &upstreamLogger), nil)
 				server, _ := NewServer(
 					t,
 					handler,
@@ -155,7 +156,7 @@ func RunIntegrationTestsForHandler(
 			}
 
 			handler := &http.ServeMux{}
-			registerHandler(handler, NewClient(t, logger), upstreams)
+			registerHandler(handler, NewClient(t, needsPrivateCache, logger), upstreams)
 			server, stats := NewServer(
 				t,
 				handler,
@@ -176,14 +177,10 @@ func RunIntegrationTestsForHandler(
 	t.Run("UpstreamDown", func(t *testing.T) {
 		t.Parallel()
 
-		if !supportsOfflineMode {
-			t.Skip("Offline mode is not yet supported here")
-		}
-
 		logger := TestLogger(t)
 		handler := &http.ServeMux{}
 		counterMiddleware := NewRequestCounterMiddleware(t)
-		cachingClient, httpClient := NewClientWithUnderlyingClient(t, logger)
+		cachingClient, httpClient := NewClientWithUnderlyingClient(t, needsPrivateCache, logger)
 
 		registerHandler(handler, cachingClient, nil)
 		server, stats := NewServer(

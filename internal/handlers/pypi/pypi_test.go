@@ -50,7 +50,7 @@ func TestInstallPythonPackages(t *testing.T) {
 				"uv",
 			)
 		},
-		true,
+		false,
 		0,
 		0,
 	)

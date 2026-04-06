@@ -56,7 +56,7 @@ func TestInstallGoPackages(t *testing.T) {
 				"github.com/mattn/go-colorable@v0.1.13",
 			)
 		},
-		true,
+		false,
 		0,
 		0,
 	)

@@ -52,7 +52,7 @@ func TestInstallNpmPackages(t *testing.T) {
 				"@npmcli/promise-spawn",
 			)
 		},
-		true,
+		false,
 		1,
 		-2,
 	)

@@ -85,6 +85,7 @@ func RegisterHandler(
 					)
 				}
 			},
+			nil,
 			caches,
 		)
 	})
@@ -97,6 +98,7 @@ func RegisterHandler(
 				r,
 				expectedCDN+r.PathValue("path"),
 				client,
+				nil,
 				nil,
 				cachesWithCDN,
 			)

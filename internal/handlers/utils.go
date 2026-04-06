@@ -55,6 +55,7 @@ func Forward(
 	upstreamURL string,
 	client *httpclient.Client,
 	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) error,
+	recovery func(resp *http.Response, err error) error,
 	upstreamCache httpclient.UpstreamCache,
 ) {
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
@@ -65,10 +66,20 @@ func Forward(
 
 	resp, err := client.Do(upstreamReq, upstreamCache)
 	if err != nil {
-		hlog.FromRequest(r).
-			Panic().
-			Err(err).
-			Msg("Error forwarding request to upstream")
+		if recovery != nil {
+			if err2 := recovery(resp, err); err2 != nil {
+				hlog.FromRequest(r).
+					Panic().
+					Errs("errors", []error{err, err2}).
+					Msg("An error happened when trying to recover from an error forwarding request to upstream")
+			}
+			return
+		} else {
+			hlog.FromRequest(r).
+				Panic().
+				Err(err).
+				Msg("Error forwarding request to upstream")
+		}
 	}
 
 	defer func() {
