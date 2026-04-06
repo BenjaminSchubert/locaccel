@@ -16,7 +16,19 @@ func RegisterHandler(
 ) {
 	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
 
-	handler.HandleFunc("GET /v2/", func(w http.ResponseWriter, r *http.Request) {
-		handlers.Forward(w, r, registry+r.URL.RequestURI(), client, nil, caches)
+	handler.HandleFunc("GET /v2/{path...}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("path") == "" {
+			handlers.Forward(w, r, registry+r.URL.RequestURI(), client, nil,
+				func(resp *http.Response, err error) error {
+					w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("Content-Length", "0")
+
+					w.WriteHeader(http.StatusOK)
+					return nil
+				}, caches)
+		} else {
+			handlers.Forward(w, r, registry+r.URL.RequestURI(), client, nil, nil, caches)
+		}
 	})
 }

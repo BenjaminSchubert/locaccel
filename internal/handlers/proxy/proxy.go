@@ -44,6 +44,7 @@ func RegisterHandler(
 			r.URL.String(),
 			client,
 			nil,
+			nil,
 			caches,
 		)
 	})

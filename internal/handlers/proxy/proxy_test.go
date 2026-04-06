@@ -57,7 +57,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 						tc.command,
 					)
 				},
-				true,
+				false,
 				0,
 				0,
 			)
@@ -71,7 +71,7 @@ func TestProxyForbidsByDefault(t *testing.T) {
 	logger := testutils.TestLogger(t)
 
 	handler := &http.ServeMux{}
-	proxy.RegisterHandler([]string{}, handler, testutils.NewClient(t, logger), nil)
+	proxy.RegisterHandler([]string{}, handler, testutils.NewClient(t, false, logger), nil)
 	server := httptest.NewServer(
 		middleware.ApplyAllMiddlewares(
 			handler,
@@ -104,7 +104,7 @@ func BenchmarkIntegrationProxy(b *testing.B) {
 	proxy.RegisterHandler(
 		[]string{"deb.debian.org"},
 		handler,
-		testutils.NewClient(b, &logger),
+		testutils.NewClient(b, false, &logger),
 		nil,
 	)
 
@@ -183,7 +183,7 @@ func BenchmarkProxy(b *testing.B) {
 	proxy.RegisterHandler(
 		[]string{upstreamUri.Host},
 		handler,
-		testutils.NewClient(b, &logger),
+		testutils.NewClient(b, false, &logger),
 		nil,
 	)
 	server := httptest.NewServer(

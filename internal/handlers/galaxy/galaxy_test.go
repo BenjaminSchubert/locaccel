@@ -32,7 +32,7 @@ func TestInstallGalaxyPackages(t *testing.T) {
 			proxy.RegisterHandler(
 				[]string{"deb.debian.org"},
 				handler,
-				testutils.NewClient(t, logger),
+				testutils.NewClient(t, false, logger),
 				nil,
 			)
 			prox, _ := testutils.NewServer(
@@ -61,7 +61,7 @@ func TestInstallGalaxyPackages(t *testing.T) {
 				"apt-get update && apt-get install --assume-yes --no-install-recommends ansible-core && ansible-galaxy collection install -v community.general",
 			)
 		},
-		true,
+		false,
 		0,
 		1,
 	)

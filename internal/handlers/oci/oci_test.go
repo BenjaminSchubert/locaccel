@@ -32,14 +32,15 @@ func TestDownloadImageWithPodman(t *testing.T) {
 	t.Parallel()
 
 	for _, testcase := range []struct {
-		registry string
-		location string
-		image    string
+		registry          string
+		location          string
+		image             string
+		needsPrivateCache bool
 	}{
-		{"docker.io", "https://registry-1.docker.io", "docker.io/alpine"},
-		{"gcr.io", "https://gcr.io", "gcr.io/distroless/static"},
-		{"quay.io", "https://quay.io", "quay.io/navidys/prometheus-podman-exporter"},
-		{"ghcr.io", "https://ghcr.io", "ghcr.io/benjaminschubert/locaccel"},
+		{"docker.io", "https://registry-1.docker.io", "docker.io/alpine", false},
+		{"gcr.io", "https://gcr.io", "gcr.io/distroless/static", true},
+		{"quay.io", "https://quay.io", "quay.io/navidys/prometheus-podman-exporter", false},
+		{"ghcr.io", "https://ghcr.io", "ghcr.io/benjaminschubert/locaccel", false},
 	} {
 		t.Run(testcase.registry, func(t *testing.T) {
 			t.Parallel()
@@ -82,9 +83,9 @@ func TestDownloadImageWithPodman(t *testing.T) {
 						testcase.image,
 					)
 				},
-				false,
+				testcase.needsPrivateCache,
 				0,
-				0,
+				1,
 			)
 		})
 	}

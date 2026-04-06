@@ -65,12 +65,13 @@ func RegisterHandler(
 						)
 					}
 				},
+				nil,
 				caches,
 			)
 		},
 	)
 	handler.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		handlers.Forward(w, r, galaxyServer+r.URL.RequestURI(), client, nil, caches)
+		handlers.Forward(w, r, galaxyServer+r.URL.RequestURI(), client, nil, nil, caches)
 	})
 }
 
