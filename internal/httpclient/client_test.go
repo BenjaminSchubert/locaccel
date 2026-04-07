@@ -1173,3 +1173,63 @@ func TestKeepOnlyLatestVersionForVaryHeaders(t *testing.T) {
 	}, []string{"0c182ae20fca17b0e8c3e79cacdd80dbc1f84b55d379191ff7ecaf860d9bf2fd", "20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b", "637bbb3c745ab7eeed63bde324207aac7c487b3947ad54fb967aa5b5bc7960e4", "c3c53fea4e69694dddf35d92d29cc5dd743c20cc80f1418461ce115c80b39095"})
 	validateQueries([]string{"miss", "miss", "miss", "miss"})
 }
+
+func TestDoesntReturnCachedEntryFromNonExplicitlyCacheableEntriesUnlessDisconnected(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	counter := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		counter += 1
+		clock.Advance()
+
+		if counter > 2 {
+			w.WriteHeader(http.StatusTooManyRequests)
+		}
+		_, err := w.Write([]byte("Hello! " + strconv.Itoa(counter)))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 1", body)
+
+	// Second request should be fresh again
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 2", body)
+
+	// Third request should be rate limited, and serve from cache
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 2", body)
+
+	srv.Close()
+
+	// Should still serve from cache
+	resp, body = makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello! 2", body)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b",
+				200,
+				http.Header{
+					"Content-Length": []string{"8"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				http.Header{},
+				clock.Now().Add(-2 * time.Second).Local(),
+			},
+		},
+	}, []string{"0c182ae20fca17b0e8c3e79cacdd80dbc1f84b55d379191ff7ecaf860d9bf2fd", "20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b"})
+	validateQueries([]string{"miss", "miss", "hit", "hit"})
+}

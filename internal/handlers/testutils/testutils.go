@@ -117,7 +117,8 @@ func RunIntegrationTestsForHandler(
 	registerHandler func(handler *http.ServeMux, client *httpclient.Client, upstreamCaches []*url.URL),
 	test func(t *testing.T, serverURL string),
 	supportsOfflineMode bool,
-	expectedCacheHits uint64,
+	expectedCacheHitsOnInitialQuery uint64,
+	expectedDeltaBetweenCacheHitsOnCachedQueryAndcacheMisses int64,
 ) {
 	t.Helper()
 
@@ -168,7 +169,7 @@ func RunIntegrationTestsForHandler(
 
 			assert.Positive(t, stats.BytesServed.Load())
 			assert.Positive(t, stats.CacheMisses.Load())
-			assert.Equal(t, expectedCacheHits, stats.CacheHits.Load())
+			assert.Equal(t, expectedCacheHitsOnInitialQuery, stats.CacheHits.Load())
 		})
 	}
 
@@ -199,14 +200,22 @@ func RunIntegrationTestsForHandler(
 
 		assert.Positive(t, stats.BytesServed.Load())
 		assert.Positive(t, stats.CacheMisses.Load())
-		assert.Equal(t, expectedCacheHits, stats.CacheHits.Load())
+		assert.Equal(t, expectedCacheHitsOnInitialQuery, stats.CacheHits.Load())
 
 		httpClient.Transport = &OfflineTransport{}
 
 		// Run the test again, with the cache disconnected
 		test(t, server.URL)
 
-		assert.Equal(t, stats.CacheHits.Load()-2*expectedCacheHits, stats.CacheMisses.Load())
+		assert.Equal(
+			t,
+			uint64( //nolint:gosec
+				int64( //nolint:gosec
+					stats.CacheHits.Load(),
+				)+expectedDeltaBetweenCacheHitsOnCachedQueryAndcacheMisses,
+			),
+			stats.CacheMisses.Load(),
+		)
 	})
 }
 

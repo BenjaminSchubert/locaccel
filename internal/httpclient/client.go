@@ -324,7 +324,12 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 
 	c.notify(req, "miss")
 
-	if !httpcaching.IsCacheable(resp, c.isPrivate, logger) {
+	if isCacheable, explicitlyConfigured := httpcaching.IsCacheable(
+		resp,
+		c.isPrivate,
+		logger,
+	); !isCacheable &&
+		explicitlyConfigured {
 		logger.Debug().Msg("request is not cacheable")
 		return resp, nil
 	}

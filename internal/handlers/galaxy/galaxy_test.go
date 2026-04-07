@@ -61,7 +61,8 @@ func TestInstallGalaxyPackages(t *testing.T) {
 				"apt-get update && apt-get install --assume-yes --no-install-recommends ansible-core && ansible-galaxy collection install -v community.general",
 			)
 		},
-		false,
+		true,
 		0,
+		1,
 	)
 }

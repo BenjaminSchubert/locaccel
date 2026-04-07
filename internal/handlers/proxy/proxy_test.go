@@ -59,6 +59,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 				},
 				true,
 				0,
+				0,
 			)
 		})
 	}
