@@ -10,7 +10,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func IsCacheable(r *http.Response, isPrivate bool, logger *zerolog.Logger) bool {
+func IsCacheable(
+	r *http.Response,
+	isPrivate bool,
+	logger *zerolog.Logger,
+) (cacheable, explicitlyConfigured bool) {
 	// Implements RFC 9111 section 3
 	//
 	// A cache MUST NOT store a response to a request unless:
@@ -44,47 +48,47 @@ func IsCacheable(r *http.Response, isPrivate bool, logger *zerolog.Logger) bool 
 
 	// Reasons it cannot be cached
 	if r.StatusCode != http.StatusOK {
-		return false
+		return false, true
 	}
 
 	cacheControl, err := ParseCacheControlDirective(r.Header.Values("Cache-Control"), logger)
 	if err != nil {
 		logger.Warn().Err(err).Msg("unable to parse cache control directive")
-		return false
+		return false, true
 	}
 
 	if _, ok := r.Header["Range"]; ok {
-		return false
+		return false, true
 	}
 	if _, ok := r.Header["Content-Range"]; ok {
-		return false
+		return false, true
 	}
 
 	if cacheControl.NoStore {
-		return false
+		return false, true
 	}
 
 	if cacheControl.Private {
-		return isPrivate
+		return isPrivate, true
 	}
 
 	if _, ok := r.Header["Authorization"]; ok && !isPrivate {
 		if !cacheControl.MustRevalidate && !cacheControl.Public && cacheControl.SMaxAge == 0 {
-			return false
+			return false, true
 		}
 	}
 
 	// Reasons it could be cached
 	if cacheControl.Public || cacheControl.MaxAge != 0 || cacheControl.SMaxAge != 0 {
-		return true
+		return true, true
 	}
 
 	if _, ok := r.Header["Expires"]; ok {
-		return true
+		return true, true
 	}
 
 	if val := r.Header.Get("Etag"); val != "" {
-		return true
+		return true, true
 	}
 
 	// If the response has a Last-Modified header field (Section 8.8.2 of RFC 9110),
@@ -93,11 +97,11 @@ func IsCacheable(r *http.Response, isPrivate bool, logger *zerolog.Logger) bool 
 	// this fraction might be 10%.
 	if val := r.Header.Get("Last-Modified"); val != "" {
 		if _, err = http.ParseTime(val); err == nil {
-			return true
+			return true, true
 		}
 		logger.Warn().Err(err).Msg("unable to parse Last-Modified header")
 	}
 
 	// Be safe, don't cache otherwise
-	return false
+	return false, false
 }

@@ -54,6 +54,7 @@ func TestInstallNpmPackages(t *testing.T) {
 		},
 		true,
 		1,
+		-2,
 	)
 }
 
