@@ -142,7 +142,7 @@ func healthCheck(conf *config.Config, logger *zerolog.Logger) {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Unable to prepare request for healthcheck")
 	}
-	resp, err := client.Do(req) //nolint:gosec
+	resp, err := client.Do(req)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("The /healthcheck endpoint is unreachable")
 	}

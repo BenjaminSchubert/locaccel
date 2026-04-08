@@ -117,7 +117,7 @@ func (f *FileCache) SetupIngestion(
 
 			hash := hex.EncodeToString(hasher.Sum(nil))
 
-			if err := os.Rename( //nolint:gosec
+			if err := os.Rename(
 				dest.Name(),
 				path.Join(f.root, hash[:2], hash[2:]),
 			); err != nil {
@@ -140,7 +140,7 @@ func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File, logger *zerolog.Lo
 	if e := dest.Close(); e != nil {
 		logger.Error().Err(e).Msg("error closing temporary file.")
 	}
-	if e := os.Remove(dest.Name()); e != nil { //nolint:gosec
+	if e := os.Remove(dest.Name()); e != nil {
 		logger.Error().Err(e).Msg("error removing temporary file.")
 	}
 

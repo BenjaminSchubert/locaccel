@@ -67,7 +67,7 @@ func BenchmarkJSONRewrite(b *testing.B) {
 		require.NoError(b, err)
 		req.Header.Add("Accept", "application/vnd.pypi.simple.v1+json")
 
-		resp, err := http.DefaultClient.Do(req) //nolint:gosec
+		resp, err := http.DefaultClient.Do(req)
 		require.NoError(b, err)
 
 		pytestInfo, err = io.ReadAll(resp.Body)
