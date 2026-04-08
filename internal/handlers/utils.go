@@ -70,10 +70,9 @@ func Forward(
 			Err(err).
 			Msg("Error forwarding request to upstream")
 	}
-	body := resp.Body
 
 	defer func() {
-		if err := body.Close(); err != nil {
+		if err := resp.Body.Close(); err != nil {
 			hlog.FromRequest(r).
 				Panic().
 				Err(err).
@@ -138,12 +137,23 @@ func modifyBody(
 	}
 
 	content, err := io.ReadAll(body)
-	if cErr := body.Close(); cErr != nil {
+
+	if isGzipped {
+		if cErr := body.Close(); cErr != nil {
+			hlog.FromRequest(r).
+				Error().
+				Err(cErr).
+				Msg("An unexpected error happend trying to close the gzip reader")
+		}
+	}
+
+	if cErr := resp.Body.Close(); cErr != nil {
 		hlog.FromRequest(r).
 			Error().
 			Err(cErr).
-			Msg("An unexpected error happend trying to close the usptream body")
+			Msg("An unexpected error happend trying to close the upstream request body")
 	}
+
 	if err != nil {
 		return err
 	}
