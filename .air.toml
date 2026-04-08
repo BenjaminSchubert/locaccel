@@ -2,11 +2,11 @@ tmp_dir = ".cache/tmp"
 
 [build]
   args_bin = []
-  bin = "./.cache/build/locaccel"
+  entrypoint = ["./.cache/build/locaccel"]
   cmd = "go build -o ./.cache/build/locaccel cmd/locaccel/locaccel.go"
   pre_cmd = ["go generate ./..."]
-  exclude_dir = [".cache/"]
   exclude_regex = ["_test.go", "_gen.go"]
+  include_dir = ["cmd/", "internal/"]
   include_ext = ["go", "html", "css", "js", "tmpl"]
   send_interrupt = true
   kill_delay = 5000000000 # nanosecond
