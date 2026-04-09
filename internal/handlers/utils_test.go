@@ -388,6 +388,7 @@ func BenchmarkHandlingOfGzipResponses(b *testing.B) {
 			srv := httptest.NewServer(
 				http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Add("Content-Encoding", "gzip")
+					w.Header().Add("Cache-Control", "no-store")
 					w.WriteHeader(http.StatusOK)
 					_, err := w.Write(data)
 					assert.NoError(b, err)
