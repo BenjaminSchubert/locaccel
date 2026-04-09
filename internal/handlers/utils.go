@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 
@@ -55,7 +56,7 @@ func Forward(
 	upstreamURL string,
 	client *httpclient.Client,
 	modify func(body []byte, resp *http.Response, jsonHandler *JSONHandler) error,
-	recovery func(resp *http.Response, err error) error,
+	recovery func(w http.ResponseWriter, err error) error,
 	upstreamCache httpclient.UpstreamCache,
 ) {
 	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
@@ -67,19 +68,31 @@ func Forward(
 	resp, err := client.Do(upstreamReq, upstreamCache)
 	if err != nil {
 		if recovery != nil {
-			if err2 := recovery(resp, err); err2 != nil {
+			if err2 := recovery(w, err); err2 != nil {
 				hlog.FromRequest(r).
-					Panic().
-					Errs("errors", []error{err, err2}).
+					Error().
+					Err(err).
 					Msg("An error happened when trying to recover from an error forwarding request to upstream")
+			} else {
+				return
 			}
-			return
-		} else {
-			hlog.FromRequest(r).
-				Panic().
-				Err(err).
-				Msg("Error forwarding request to upstream")
 		}
+
+		if uerr, ok := err.(*url.Error); ok {
+			if uerr.Timeout() {
+				w.WriteHeader(http.StatusGatewayTimeout)
+			} else {
+				w.WriteHeader(http.StatusBadGateway)
+			}
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		hlog.FromRequest(r).
+			Error().
+			Err(err).
+			Msg("Error forwarding request to upstream")
+
+		return
 	}
 
 	defer func() {
@@ -105,10 +118,12 @@ func Forward(
 		}()
 
 		if err := modifyBody(resp, r, modify, buffer); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			hlog.FromRequest(r).
-				Panic().
+				Error().
 				Err(err).
 				Msg("Error while preparing the body of the new response")
+			return
 		}
 	}
 
@@ -123,8 +138,16 @@ func Forward(
 		struct{ io.Reader }{resp.Body},
 		*buf,
 	); err != nil {
+		if closer, ok := w.(io.Closer); ok {
+			if err2 := closer.Close(); err2 != nil {
+				hlog.FromRequest(r).
+					Panic().
+					Errs("errors", []error{err, err2}).
+					Msg("Error closing the body of the upstream request after having a problem sending it the data")
+			}
+		}
 		hlog.FromRequest(r).
-			Panic().
+			Error().
 			Err(err).
 			Int64("written", n).
 			Msg("Error sending response to client")

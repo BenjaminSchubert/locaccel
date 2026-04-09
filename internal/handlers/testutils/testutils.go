@@ -39,13 +39,26 @@ func (o *OfflineTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func NewClient(tb testing.TB, isPrivate bool, logger *zerolog.Logger) *httpclient.Client {
 	tb.Helper()
 
-	client, _ := NewClientWithUnderlyingClient(tb, isPrivate, logger)
+	client, _ := NewClientWithUnderlyingClient(tb, isPrivate, middleware.SetCacheState, logger)
+	return client
+}
+
+func NewClientWithNotify(
+	tb testing.TB,
+	isPrivate bool,
+	notify func(*http.Request, string),
+	logger *zerolog.Logger,
+) *httpclient.Client {
+	tb.Helper()
+
+	client, _ := NewClientWithUnderlyingClient(tb, isPrivate, notify, logger)
 	return client
 }
 
 func NewClientWithUnderlyingClient(
 	tb testing.TB,
 	isPrivate bool,
+	notify func(*http.Request, string),
 	logger *zerolog.Logger,
 ) (cachingClient *httpclient.Client, httpClient *http.Client) {
 	tb.Helper()
@@ -79,7 +92,7 @@ func NewClientWithUnderlyingClient(
 		cache,
 		logger,
 		isPrivate,
-		middleware.SetCacheState,
+		notify,
 		time.Now,
 		time.Since,
 	), client
@@ -180,7 +193,12 @@ func RunIntegrationTestsForHandler(
 		logger := TestLogger(t)
 		handler := &http.ServeMux{}
 		counterMiddleware := NewRequestCounterMiddleware(t)
-		cachingClient, httpClient := NewClientWithUnderlyingClient(t, needsPrivateCache, logger)
+		cachingClient, httpClient := NewClientWithUnderlyingClient(
+			t,
+			needsPrivateCache,
+			middleware.SetCacheState,
+			logger,
+		)
 
 		registerHandler(handler, cachingClient, nil)
 		server, stats := NewServer(
