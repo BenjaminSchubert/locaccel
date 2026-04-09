@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"io"
 	"maps"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/klauspost/compress/gzip"
 	"github.com/rs/zerolog/hlog"
 
 	"github.com/benjaminschubert/locaccel/internal/httpclient"
@@ -31,7 +31,17 @@ var (
 	}
 	bufferPool = sync.Pool{
 		New: func() any {
-			return new(bytes.Buffer)
+			return bytes.NewBuffer(make([]byte, 0, 1024*128))
+		},
+	}
+	gzipReaderPool = sync.Pool{
+		New: func() any {
+			return new(gzip.Reader)
+		},
+	}
+	gzipWriterPool = sync.Pool{
+		New: func() any {
+			return gzip.NewWriter(nil)
 		},
 	}
 )
@@ -164,13 +174,15 @@ func modifyBody(
 	body := resp.Body
 
 	if isGzipped {
-		body, err = gzip.NewReader(body)
-		if err != nil {
+		gb := gzipReaderPool.Get().(*gzip.Reader)
+		if err := gb.Reset(body); err != nil {
+			gzipReaderPool.Put(gb)
 			return err
 		}
+		body = gb
 	}
 
-	content, err := io.ReadAll(body)
+	_, err = io.Copy(buffer, body)
 
 	if isGzipped {
 		if cErr := body.Close(); cErr != nil {
@@ -179,6 +191,7 @@ func modifyBody(
 				Err(cErr).
 				Msg("An unexpected error happend trying to close the gzip reader")
 		}
+		gzipReaderPool.Put(body)
 	}
 
 	if cErr := resp.Body.Close(); cErr != nil {
@@ -198,18 +211,25 @@ func modifyBody(
 		jsonHandlerPool.Put(jsonHandler)
 	}()
 
-	if err := modify(content, resp, jsonHandler); err != nil {
+	if err := modify(buffer.Bytes(), resp, jsonHandler); err != nil {
 		return err
 	}
+
+	buffer.Reset()
+
 	if isGzipped {
-		writer := gzip.NewWriter(buffer)
+		writer := gzipWriterPool.Get().(*gzip.Writer)
+		writer.Reset(buffer)
 		_, err := writer.Write(jsonHandler.Buffer.Bytes())
 		if err != nil {
+			gzipWriterPool.Put(writer)
 			return err
 		}
 		if err := writer.Close(); err != nil {
+			gzipWriterPool.Put(writer)
 			return err
 		}
+		gzipWriterPool.Put(writer)
 	} else {
 		buffer.Write(jsonHandler.Buffer.Bytes())
 	}
