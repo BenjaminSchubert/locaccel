@@ -395,6 +395,13 @@ func BenchmarkHandlingOfGzipResponses(b *testing.B) {
 			)
 			b.Cleanup(srv.Close)
 
+			client := testutils.NewClientWithNotify(
+				b,
+				false,
+				func(r *http.Request, s string) {},
+				testutils.TestLogger(b),
+			)
+
 			for b.Loop() {
 				recorder := httptest.NewRecorder()
 
@@ -405,12 +412,7 @@ func BenchmarkHandlingOfGzipResponses(b *testing.B) {
 					recorder,
 					req,
 					srv.URL,
-					testutils.NewClientWithNotify(
-						b,
-						false,
-						func(r *http.Request, s string) {},
-						testutils.TestLogger(b),
-					),
+					client,
 					func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 						jsonHandler.Buffer.Write(body)
 						return nil
