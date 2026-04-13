@@ -75,7 +75,8 @@ func Forward(
 	}
 	maps.Copy(upstreamReq.Header, r.Header)
 
-	resp, err := client.Do(upstreamReq, upstreamCache)
+	// The bodyclose lint is wrong here, we do close it every time
+	resp, err := client.Do(upstreamReq, upstreamCache) //nolint:bodyclose
 	if err != nil {
 		if recovery != nil {
 			if err2 := recovery(w, err); err2 != nil {
@@ -105,6 +106,26 @@ func Forward(
 		return
 	}
 
+	if resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp) {
+		go func() {
+			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+				hlog.FromRequest(r).
+					Error().
+					Err(err).
+					Msg("Error while consuming the upstream request after returning NotModified")
+			}
+			if err := resp.Body.Close(); err != nil {
+				hlog.FromRequest(r).
+					Panic().
+					Err(err).
+					Msg("Error closing the body of the upstream request")
+			}
+		}()
+		maps.Copy(w.Header(), resp.Header)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			hlog.FromRequest(r).
@@ -113,12 +134,6 @@ func Forward(
 				Msg("Error closing the body of the upstream request")
 		}
 	}()
-
-	if resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp) {
-		maps.Copy(w.Header(), resp.Header)
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
 
 	if modify != nil {
 		buffer := bufferPool.Get().(*bytes.Buffer)
