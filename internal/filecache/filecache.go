@@ -115,6 +115,15 @@ func (f *FileCache) SetupIngestion(
 				return f.cleanup(src, dest, logger)
 			}
 
+			// Was the entire content read? Otherwise fail
+			n, err := src.Read(make([]byte, 1))
+			if err != io.EOF && n != 0 {
+				logger.Error().
+					Err(err).
+					Msg("The file to ingest was not read fully before closing. Skipping ingestion")
+				return f.cleanup(src, dest, logger)
+			}
+
 			hash := hex.EncodeToString(hasher.Sum(nil))
 
 			if err := os.Rename(
