@@ -163,6 +163,28 @@ func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
 	require.NoError(t, reader.Close())
 }
 
+func TestDoesNotCommitFileThatWasNotReadFully(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	logger := testutils.TestLogger(t)
+
+	cache, err := filecache.NewFileCache(cacheDir, 100, 10000, logger)
+	require.NoError(t, err)
+
+	reader := cache.SetupIngestion(
+		io.NopCloser(bytes.NewBufferString("hello world!")),
+		func(hash string) { assert.Fail(t, "Hash should not have been called") },
+		func() {},
+		logger,
+	)
+
+	n, err := reader.Read(make([]byte, 5))
+	require.NoError(t, err)
+	assert.Equal(t, 5, n)
+	require.NoError(t, reader.Close())
+}
+
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
@@ -289,6 +311,19 @@ func TestCanGetAllHashes(t *testing.T) {
 	)
 }
 
+func TestCanDelete(t *testing.T) {
+	t.Parallel()
+
+	logger := testutils.TestLogger(t)
+	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
+	require.NoError(t, err)
+
+	hash := ingest(t, cache, "one", logger)
+
+	err = cache.Delete(hash, logger)
+	require.NoError(t, err)
+}
+
 func BenchmarkFileIngestion(b *testing.B) {
 	for _, size := range []string{"10KiB", "100KiB", "1MiB", "10MiB", "100MiB", "1GiB"} {
 		b.Run(size, func(b *testing.B) {
@@ -317,17 +352,4 @@ func BenchmarkFileIngestion(b *testing.B) {
 			}
 		})
 	}
-}
-
-func TestCanDelete(t *testing.T) {
-	t.Parallel()
-
-	logger := testutils.TestLogger(t)
-	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
-	require.NoError(t, err)
-
-	hash := ingest(t, cache, "one", logger)
-
-	err = cache.Delete(hash, logger)
-	require.NoError(t, err)
 }
