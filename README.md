@@ -283,11 +283,18 @@ the following:
 Set the following environment variables:
 
 - `GOPROXY=<locaccel-url>:<goproxy port>`
-- `GOSUMDB=sum.golang.org <locaccel-url>:<goproxy port>`
+- `GOSUMDB=sum.golang.org <locaccel-url>:<goproxy port>/sumdb`
 
 #### NPM
 
-Set the following in your `.npmrc` or as environment variables:
+
+Set the following in your `.npmrc`:
+
+```
+registry=<locaccel-url>:<npm port>
+```
+
+Or as en environment variable:
 
 - `npm_config_registry=<locaccel-url>:<npm port>`
 

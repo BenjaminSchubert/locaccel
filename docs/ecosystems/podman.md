@@ -63,7 +63,7 @@ trusted-host = host.containers.internal
 And a `npmrc` in `/etc/containers/mounts/npmrc` with the following content:
 
 ```
-npm_config_registry=http://host.containers.internal:3144
+registry=http://host.containers.internal:3144
 ```
 
 And a `gemrc` in `/etc/containers/mounts/gemrc` with the following content:
@@ -110,9 +110,9 @@ For running, you can update `/etc/containers/containers.conf` to container:
 [containers]
 env = [
     "GOPROXY=http://host.containers.internal:3143",
-    "GOSUMDB=sum.golang.org http://host.containers.internal:3143",
+    "GOSUMDB=sum.golang.org http://host.containers.internal:3143/sumdb",
 ]
-
+```
 
 ### Ansible Galaxy
 
