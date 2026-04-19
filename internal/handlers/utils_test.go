@@ -28,6 +28,7 @@ func testEndpoint(t *testing.T) string {
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Etag", "123456")
+			w.Header().Add("Cache-Control", "max-age=100")
 			_, err := w.Write([]byte("Hello!"))
 			assert.NoError(t, err)
 		}),
@@ -118,7 +119,6 @@ func TestReturnsBadGatewayWhenUnableToContactUpstream(t *testing.T) {
 
 	testReq := testRequest(t)
 	testReq.Header.Add("If-None-Match", "123456")
-	testReq.Header.Add("If-None-Match", "123456")
 
 	recorder := httptest.NewRecorder()
 
@@ -132,11 +132,7 @@ func TestReturnsBadGatewayWhenUnableToContactUpstream(t *testing.T) {
 			func(r *http.Request, s string) {},
 			testutils.TestLogger(t),
 		),
-		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
-			_, err := jsonHandler.Buffer.WriteString("Hi!")
-			require.NoError(t, err)
-			return nil
-		},
+		nil,
 		nil,
 		httpclient.UpstreamCache{},
 	)
@@ -237,8 +233,6 @@ func TestReturnProperErrorWhenUnableToModify(t *testing.T) {
 			testutils.TestLogger(t),
 		),
 		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
-			_, err := jsonHandler.Buffer.WriteString("Hi!")
-			require.NoError(t, err)
 			return errTest
 		},
 		nil,
