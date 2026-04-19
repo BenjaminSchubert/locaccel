@@ -22,6 +22,7 @@ var (
 	ErrInitialize          = errors.New("unable to initialize cache")
 	ErrCannotOpen          = errors.New("unable to open cached file")
 	ErrGCleanupNotRequired = errors.New("no need to remove old entries")
+	ErrAlreadyClosed       = errors.New("the file was already closed")
 	hashPool               = sync.Pool{
 		New: func() any {
 			return blake3.New()
@@ -87,11 +88,17 @@ func (f *FileCache) SetupIngestion(
 
 	hasher := hashPool.Get().(*blake3.Hasher)
 	hasher.Reset()
+	wasCalled := false
 
 	return teereader.New(
 		src,
 		io.MultiWriter(dest, hasher),
 		func(totalread int, readErr, writeErr error) error {
+			if wasCalled {
+				return ErrAlreadyClosed
+			}
+			wasCalled = true
+
 			defer hashPool.Put(hasher)
 			defer onCleanup()
 
