@@ -63,7 +63,7 @@ func TestCanForwardBasicQuery(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		nil,
 		nil,
@@ -94,7 +94,7 @@ func TestReturnsNotModifiedIfMatchesOriginalQuery(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 			_, err := jsonHandler.Buffer.WriteString("Hi!")
@@ -130,7 +130,7 @@ func TestReturnsBadGatewayWhenUnableToContactUpstream(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		nil,
 		nil,
@@ -159,7 +159,7 @@ func TestReturnsErrorOnTimeoutFromUpstream(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	httpClient, underlyingClient := testutils.NewClientWithUnderlyingClient(
-		t, false, func(r *http.Request, s string) {}, testutils.TestLogger(t),
+		t, false, func(r *http.Request, s string) {}, testutils.TestLogger(t, nil),
 	)
 	underlyingClient.Timeout = 5 * time.Millisecond
 
@@ -197,7 +197,7 @@ func TestCanModifyQueryBody(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 			_, err := jsonHandler.Buffer.WriteString("Hi!")
@@ -230,7 +230,7 @@ func TestReturnProperErrorWhenUnableToModify(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 			return errTest
@@ -261,7 +261,7 @@ func TestCanRecoverFromUpstreamError(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		nil,
 		func(w http.ResponseWriter, err error) error {
@@ -294,7 +294,7 @@ func TestReportsErrorsFromAFailedRecovery(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		nil,
 		func(w http.ResponseWriter, err error) error {
@@ -341,7 +341,7 @@ func TestHandledModifyingGzippedRequestsTransparently(t *testing.T) {
 			t,
 			false,
 			func(r *http.Request, s string) {},
-			testutils.TestLogger(t),
+			testutils.TestLogger(t, nil),
 		),
 		func(body []byte, resp *http.Response, jsonHandler *handlers.JSONHandler) error {
 			assert.Equal(t, "Hello!", string(body))
@@ -394,7 +394,7 @@ func BenchmarkHandlingOfGzipResponses(b *testing.B) {
 				b,
 				false,
 				func(r *http.Request, s string) {},
-				testutils.TestLogger(b),
+				testutils.TestLogger(b, nil),
 			)
 
 			for b.Loop() {

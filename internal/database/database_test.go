@@ -15,7 +15,7 @@ import (
 func TestRetrieveNotFound(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -27,7 +27,7 @@ func TestRetrieveNotFound(t *testing.T) {
 func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -44,7 +44,7 @@ func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -73,7 +73,7 @@ func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 func TestCanRetrieveStatistics(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -91,7 +91,7 @@ func TestCanRetrieveStatistics(t *testing.T) {
 func TestCanIterateOverEntries(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
@@ -131,7 +131,7 @@ func TestCanIterateOverEntries(t *testing.T) {
 func TestCanDeleteEntry(t *testing.T) {
 	t.Parallel()
 
-	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t))
+	db, err := database.NewDatabase[dbtestutils.TestObj](t.TempDir(), testutils.TestLogger(t, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 

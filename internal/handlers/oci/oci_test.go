@@ -86,6 +86,7 @@ func TestDownloadImageWithPodman(t *testing.T) {
 				testcase.needsPrivateCache,
 				0,
 				1,
+				nil,
 			)
 		})
 	}

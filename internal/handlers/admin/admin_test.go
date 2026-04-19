@@ -21,10 +21,13 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
-func getAdminServer(t *testing.T) (*httptest.Server, *httpclient.Cache) {
+func getAdminServer(
+	t *testing.T,
+	expectedErrorMessages []string,
+) (*httptest.Server, *httpclient.Cache) {
 	t.Helper()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, expectedErrorMessages)
 
 	handler := &http.ServeMux{}
 
@@ -63,7 +66,7 @@ func getAdminServer(t *testing.T) (*httptest.Server, *httpclient.Cache) {
 func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 	t.Parallel()
 
-	server, _ := getAdminServer(t)
+	server, _ := getAdminServer(t, nil)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
 	require.NoError(t, err)
@@ -79,7 +82,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 func TestDeletingUnknownKeysReturnProperError(t *testing.T) {
 	t.Parallel()
 
-	server, _ := getAdminServer(t)
+	server, _ := getAdminServer(t, []string{"Unable to remove entry from cache"})
 
 	req, err := http.NewRequestWithContext(
 		t.Context(),
@@ -98,7 +101,7 @@ func TestDeletingUnknownKeysReturnProperError(t *testing.T) {
 func TestCanDeleteKeyWithNoFileSavedAnymore(t *testing.T) {
 	t.Parallel()
 
-	server, cache := getAdminServer(t)
+	server, cache := getAdminServer(t, nil)
 	require.NoError(t, cache.New([]byte("mykey"), httpclient.CachedResponses{{ContentHash: "123"}}))
 
 	req, err := http.NewRequestWithContext(
@@ -120,13 +123,13 @@ func TestCanDeleteKey(t *testing.T) {
 
 	key := "GET+http://locaccel.test/admin"
 
-	server, cache := getAdminServer(t)
+	server, cache := getAdminServer(t, nil)
 	var hash string
 	f := cache.SetupIngestion(
 		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
 		func(h string) { hash = h },
 		func() {},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	_, err := io.ReadAll(f)
 	require.NoError(t, err)
@@ -158,13 +161,13 @@ func TestCanDeleteKey(t *testing.T) {
 func TestCanListEntriesPerHostname(t *testing.T) {
 	t.Parallel()
 
-	server, cache := getAdminServer(t)
+	server, cache := getAdminServer(t, nil)
 	var hash string
 	f := cache.SetupIngestion(
 		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
 		func(h string) { hash = h },
 		func() {},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	_, err := io.ReadAll(f)
 	require.NoError(t, err)
@@ -206,7 +209,7 @@ func TestCanListEntriesPerHostname(t *testing.T) {
 func TestRespondsForHealthcheck(t *testing.T) {
 	t.Parallel()
 
-	server, _ := getAdminServer(t)
+	server, _ := getAdminServer(t, nil)
 
 	req, err := http.NewRequestWithContext(
 		t.Context(),

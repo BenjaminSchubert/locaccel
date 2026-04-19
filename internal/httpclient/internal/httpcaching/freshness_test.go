@@ -15,9 +15,10 @@ func TestGetFreshness(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		description string
-		headers     http.Header
-		expected    int
+		description           string
+		headers               http.Header
+		expected              int
+		expectedErrorMEssages []string
 	}{
 		{
 			"s-max-age-precedence",
@@ -26,6 +27,7 @@ func TestGetFreshness(t *testing.T) {
 				"Expires":       []string{"Sun, 01 Jan 2012 12:00:00 GMT"},
 			},
 			1,
+			nil,
 		},
 		{
 			"max-age-over-expires",
@@ -34,6 +36,7 @@ func TestGetFreshness(t *testing.T) {
 				"Expires":       []string{"Sun, 01 Jan 2012 12:00:00 GMT"},
 			},
 			2,
+			nil,
 		},
 		{
 			"expires",
@@ -42,6 +45,7 @@ func TestGetFreshness(t *testing.T) {
 				"Expires": []string{"Sun, 01 Jan 2012 12:00:00 GMT"},
 			},
 			3600,
+			nil,
 		},
 		{
 			"default-if-invalid-expires",
@@ -49,6 +53,7 @@ func TestGetFreshness(t *testing.T) {
 				"Expires": []string{"hi"},
 			},
 			0,
+			nil,
 		},
 		{
 			"default-if-invalid-date",
@@ -57,6 +62,7 @@ func TestGetFreshness(t *testing.T) {
 				"Date":    []string{"hi"},
 			},
 			0,
+			[]string{"BUG: Date header is in an invalid format, which should not happen"},
 		},
 		{
 			"last-modified",
@@ -65,6 +71,7 @@ func TestGetFreshness(t *testing.T) {
 				"Date":          []string{"Sun, 01 Jan 2012 10:00:00 GMT"},
 			},
 			3600,
+			nil,
 		},
 		{
 			"default-if-invalid-last-modified",
@@ -72,6 +79,7 @@ func TestGetFreshness(t *testing.T) {
 				"Last-Modified": []string{"hi"},
 			},
 			0,
+			nil,
 		},
 		{
 			"default-if-invalid-date-on-last-modified",
@@ -80,17 +88,24 @@ func TestGetFreshness(t *testing.T) {
 				"Date":          []string{"hi"},
 			},
 			0,
+			[]string{"BUG: Date header is in an invalid format, which should not happen"},
 		},
 	} {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
+			logger := testutils.TestLogger(t, tc.expectedErrorMEssages)
+
 			cacheControl, err := ParseCacheControlDirective(
 				tc.headers["Cache-Control"],
-				testutils.TestLogger(t),
+				logger,
 			)
 			require.NoError(t, err)
-			freshness := getFreshnessLifetime(tc.headers, cacheControl, testutils.TestLogger(t))
+			freshness := getFreshnessLifetime(
+				tc.headers,
+				cacheControl,
+				logger,
+			)
 			require.Equal(t, time.Second*time.Duration(tc.expected), freshness)
 		})
 	}
@@ -106,7 +121,7 @@ func TestGetCurrentAge(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 		time.Now,
 	)
 	require.Equal(
@@ -129,7 +144,7 @@ func TestGetCurrentAgeHandlesInvalidAgeValues(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, []string{"response has an invalid Age header"}),
 		time.Now,
 	)
 
@@ -150,7 +165,10 @@ func TestGetCurrentAgeAssumeInvalidDateIsNowHeader(t *testing.T) {
 		},
 		time.Now().Add(-time.Second*40),
 		time.Now().Add(-time.Second*30),
-		testutils.TestLogger(t),
+		testutils.TestLogger(
+			t,
+			[]string{"BUG: Date header is in an invalid format, which should not happen"},
+		),
 		time.Now,
 	)
 
@@ -173,7 +191,7 @@ func TestIsFresh(t *testing.T) {
 		},
 		CacheControlResponseDirective{SMaxAge: 300 * time.Second},
 		time.Now().Add(-time.Second*120),
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 		time.Since,
 	)
 	assert.Equal(t, time.Second*120, age)
@@ -192,7 +210,7 @@ func TestIsNotFresh(t *testing.T) {
 		},
 		CacheControlResponseDirective{SMaxAge: 30 * time.Second},
 		time.Now().Add(-time.Second*120),
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 		time.Since,
 	)
 	assert.Equal(t, time.Second*120, age)

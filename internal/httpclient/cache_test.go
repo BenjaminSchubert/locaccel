@@ -100,7 +100,7 @@ func TestCanGetStatisticsOnEmptyCache(t *testing.T) {
 		t.TempDir(),
 		units.Bytes{Bytes: 10},
 		units.Bytes{Bytes: 20},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
@@ -122,7 +122,7 @@ func TestCanGetStatistics(t *testing.T) {
 		t.TempDir(),
 		units.Bytes{Bytes: 10},
 		units.Bytes{Bytes: 20},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
@@ -171,7 +171,7 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 		t.TempDir(),
 		units.Bytes{Bytes: 10},
 		units.Bytes{Bytes: 20},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
@@ -205,7 +205,7 @@ func TestCanCleanOldEntries(t *testing.T) {
 		cachePath,
 		units.Bytes{Bytes: 10},
 		units.Bytes{Bytes: 20},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()

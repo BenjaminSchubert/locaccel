@@ -42,7 +42,7 @@ func setup(
 	t.Helper()
 
 	cachePath := t.TempDir()
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	testTime, err := time.Parse(time.RFC3339, "2024-01-01T12:13:14Z")
 	require.NoError(t, err)
 	clock = &Clock{testTime}
@@ -80,7 +80,7 @@ func makeRequest(
 
 	req, err := http.NewRequestWithContext(t.Context(), method, uri, nil)
 	require.NoError(t, err)
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	req = req.WithContext(logger.WithContext(req.Context()))
 
 	req.Header = headers
@@ -1050,7 +1050,7 @@ func TestClientAddsConditionalQueriesInformation(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
-			logger := testutils.TestLogger(t)
+			logger := testutils.TestLogger(t, nil)
 			cache, err := NewCache(
 				t.TempDir(),
 				units.Bytes{Bytes: 100},

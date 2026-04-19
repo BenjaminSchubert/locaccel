@@ -64,15 +64,15 @@ func NewClientWithUnderlyingClient(
 	tb.Helper()
 
 	client := &http.Client{
-		Timeout: time.Minute,
+		Timeout: 2 * time.Minute,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          20,
 			MaxConnsPerHost:       20,
 			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   15 * time.Second,
+			ExpectContinueTimeout: 5 * time.Second,
 		},
 	}
 
@@ -133,6 +133,7 @@ func RunIntegrationTestsForHandler(
 	needsPrivateCache bool,
 	expectedCacheHitsOnInitialQuery uint64,
 	expectedDeltaBetweenCacheHitsOnCachedQueryAndcacheMisses int64,
+	expectedErrorMessagesWhenOffline []string,
 ) {
 	t.Helper()
 
@@ -144,7 +145,7 @@ func RunIntegrationTestsForHandler(
 		t.Run(fmt.Sprintf("upstreamCache=%v", useUpstreamCache), func(t *testing.T) {
 			t.Parallel()
 
-			logger := TestLogger(t)
+			logger := TestLogger(t, nil)
 			var upstreams []*url.URL
 			counterMiddleware := NewRequestCounterMiddleware(t)
 
@@ -190,7 +191,7 @@ func RunIntegrationTestsForHandler(
 	t.Run("UpstreamDown", func(t *testing.T) {
 		t.Parallel()
 
-		logger := TestLogger(t)
+		logger := TestLogger(t, expectedErrorMessagesWhenOffline)
 		handler := &http.ServeMux{}
 		counterMiddleware := NewRequestCounterMiddleware(t)
 		cachingClient, httpClient := NewClientWithUnderlyingClient(

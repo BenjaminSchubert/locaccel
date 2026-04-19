@@ -45,7 +45,7 @@ func TestResponseIsCacheable(t *testing.T) {
 				isCacheable, explicit := httpcaching.IsCacheable(
 					&resp,
 					private,
-					testutils.TestLogger(t),
+					testutils.TestLogger(t, nil),
 				)
 				assert.Equal(t, tc.expected, isCacheable)
 				assert.Equal(t, tc.explicit, explicit)

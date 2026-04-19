@@ -40,7 +40,7 @@ func TestCanParseValidHeaders(t *testing.T) {
 
 			result, err := httpcaching.ParseCacheControlDirective(
 				[]string{tc.header},
-				testutils.TestLogger(t),
+				testutils.TestLogger(t, nil),
 			)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
@@ -63,7 +63,7 @@ func TestIgnoresDuplicateHeaderValues(t *testing.T) {
 
 			result, err := httpcaching.ParseCacheControlDirective(
 				tc.header,
-				testutils.TestLogger(t),
+				testutils.TestLogger(t, nil),
 			)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
@@ -85,7 +85,7 @@ func TestErrorsOnInvalidHeaders(t *testing.T) {
 
 			_, err := httpcaching.ParseCacheControlDirective(
 				[]string{header},
-				testutils.TestLogger(t),
+				testutils.TestLogger(t, nil),
 			)
 			require.ErrorIs(t, err, httpcaching.ErrInvalidArgument)
 		})
@@ -104,7 +104,7 @@ func TestIgnoreInvalidDirective(t *testing.T) {
 
 			result, err := httpcaching.ParseCacheControlDirective(
 				[]string{header},
-				testutils.TestLogger(t),
+				testutils.TestLogger(t, nil),
 			)
 			require.NoError(t, err)
 			assert.Equal(t, httpcaching.CacheControlResponseDirective{}, result)
@@ -117,7 +117,7 @@ func TestCanComposeMultipleHeaders(t *testing.T) {
 
 	result, err := httpcaching.ParseCacheControlDirective(
 		[]string{"max-age=123", "must-revalidate, no-cache"},
-		testutils.TestLogger(t),
+		testutils.TestLogger(t, nil),
 	)
 	require.NoError(t, err)
 	assert.Equal(

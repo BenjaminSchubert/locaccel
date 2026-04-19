@@ -60,7 +60,7 @@ func TestMatchVaryHeaders(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
-			match := MatchVaryHeaders(tc.reqHeaders, tc.varyHeaders, testutils.TestLogger(t))
+			match := MatchVaryHeaders(tc.reqHeaders, tc.varyHeaders, testutils.TestLogger(t, nil))
 			require.Equal(t, tc.expected, match)
 		})
 	}

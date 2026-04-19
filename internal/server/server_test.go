@@ -13,7 +13,7 @@ import (
 func TestServerInitialization(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 
 	conf, err := config.Default(func(s string) (string, bool) { return "", false })
 	require.NoError(t, err)
