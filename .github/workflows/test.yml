@@ -11,7 +11,17 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            extra_flags: ""
+          - os: macos-latest
+            extra_flags: "-short"
+
+    runs-on: ${{ matrix.os }}
+    name: test (${{ matrix.os }})
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
@@ -27,11 +37,16 @@ jobs:
         run: go generate ./...
 
       - name: Run tests
-        run: gotestsum --hide-summary=all --junitfile=junit.xml --format=testname -- -race -coverpkg=./... -coverprofile .coverage ./...
+        run: gotestsum --hide-summary=all --junitfile=junit.xml --format=testname -- ${{ matrix.extra_flags }} -race -coverpkg=./... -coverprofile .coverage ./...
 
       - name: Remove ascii colors from junit report
         if: ${{ !cancelled() }}
-        run: sed -e 's/\xEF\xBF\xBD//g' -e 's/\[[0-9;]*[[:alpha:]]//g' -i junit.xml
+        run: |
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -e 's/\xEF\xBF\xBD//g' -e 's/\[[0-9;]*[[:alpha:]]//g' -i '' junit.xml
+          else
+            sed -e 's/\xEF\xBF\xBD//g' -e 's/\[[0-9;]*[[:alpha:]]//g' -i junit.xml
+          fi
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
@@ -40,6 +55,7 @@ jobs:
           files: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          flags: ${{ matrix.os }}
 
       - name: Upload test results to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
@@ -48,6 +64,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
           fail_ci_if_error: true
+          flags: ${{ matrix.os }}
 
   lint:
     runs-on: ubuntu-latest
