@@ -212,6 +212,8 @@ func modifyBody(
 	}()
 
 	if err := modify(buffer.Bytes(), resp, jsonHandler); err != nil {
+		buffer.Reset()
+		resp.Body = io.NopCloser(buffer)
 		return err
 	}
 
