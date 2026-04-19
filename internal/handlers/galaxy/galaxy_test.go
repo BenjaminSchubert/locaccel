@@ -27,7 +27,7 @@ func TestInstallGalaxyPackages(t *testing.T) {
 		func(t *testing.T, serverURL string) {
 			t.Helper()
 
-			logger := testutils.TestLogger(t)
+			logger := testutils.TestLogger(t, nil)
 			handler := &http.ServeMux{}
 			proxy.RegisterHandler(
 				[]string{"deb.debian.org"},
@@ -64,5 +64,6 @@ func TestInstallGalaxyPackages(t *testing.T) {
 		false,
 		0,
 		1,
+		[]string{"Error forwarding request to upstream"},
 	)
 }

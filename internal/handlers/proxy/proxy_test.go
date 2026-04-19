@@ -60,6 +60,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 				false,
 				0,
 				0,
+				nil,
 			)
 		})
 	}
@@ -68,7 +69,7 @@ func TestProxyLinuxDistributionPackageManagers(t *testing.T) {
 func TestProxyForbidsByDefault(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 
 	handler := &http.ServeMux{}
 	proxy.RegisterHandler([]string{}, handler, testutils.NewClient(t, false, logger), nil)

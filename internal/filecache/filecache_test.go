@@ -49,7 +49,7 @@ func ingest(
 func TestCanIngestAndRecover(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -85,7 +85,7 @@ func TestCanIngestAndRecover(t *testing.T) {
 
 func TestHandlesConcurrentWrites(t *testing.T) {
 	t.Parallel()
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	t.Parallel()
 
 	cacheDir := t.TempDir()
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, []string{"an error happened ingesting the file"})
 
 	cache, err := filecache.NewFileCache(cacheDir, 100, 1000, logger)
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
 	t.Parallel()
 
 	cacheDir := t.TempDir()
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 
 	cache, err := filecache.NewFileCache(cacheDir, 5, 10, logger)
 	require.NoError(t, err)
@@ -167,7 +167,10 @@ func TestDoesNotCommitFileThatWasNotReadFully(t *testing.T) {
 	t.Parallel()
 
 	cacheDir := t.TempDir()
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(
+		t,
+		[]string{"The file to ingest was not read fully before closing. Skipping ingestion"},
+	)
 
 	cache, err := filecache.NewFileCache(cacheDir, 100, 10000, logger)
 	require.NoError(t, err)
@@ -188,7 +191,7 @@ func TestDoesNotCommitFileThatWasNotReadFully(t *testing.T) {
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -201,7 +204,7 @@ func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 func TestCanStatFile(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -226,7 +229,7 @@ func TestCanStatFile(t *testing.T) {
 func TestCanGetStatistics(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -255,7 +258,7 @@ func TestCanGetStatistics(t *testing.T) {
 func TestCanRemoveOldFiles(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 10, 20, logger)
 	require.NoError(t, err)
 
@@ -279,7 +282,7 @@ func TestCanRemoveOldFiles(t *testing.T) {
 func TestCanGetAllHashes(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -314,7 +317,7 @@ func TestCanGetAllHashes(t *testing.T) {
 func TestCanDelete(t *testing.T) {
 	t.Parallel()
 
-	logger := testutils.TestLogger(t)
+	logger := testutils.TestLogger(t, nil)
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
@@ -330,7 +333,7 @@ func BenchmarkFileIngestion(b *testing.B) {
 			sizeB, err := units.DecodeBytes(size)
 			require.NoError(b, err)
 
-			logger := testutils.TestLogger(b)
+			logger := testutils.TestLogger(b, nil)
 			cache, err := filecache.NewFileCache(b.TempDir(), sizeB.Bytes, sizeB.Bytes*10, logger)
 			require.NoError(b, err)
 
