@@ -124,7 +124,7 @@ func (f *FileCache) SetupIngestion(
 
 			// Was the entire content read? Otherwise fail
 			n, err := src.Read(make([]byte, 1))
-			if err != io.EOF && n != 0 {
+			if err != io.EOF || n != 0 {
 				logger.Error().
 					Err(err).
 					Msg("The file to ingest was not read fully before closing. Skipping ingestion")
