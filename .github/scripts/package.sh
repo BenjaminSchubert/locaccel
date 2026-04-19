@@ -5,6 +5,7 @@ set -euo pipefail
 declare -a TARGETS=(
     "linux   amd64"
     "linux   arm64"
+    "darwin  amd64"
 )
 
 rm -rf build/ dist/
