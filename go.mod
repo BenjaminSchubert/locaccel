@@ -3,7 +3,7 @@ module github.com/benjaminschubert/locaccel
 go 1.24.2
 
 require (
-	github.com/dgraph-io/badger/v4 v4.9.1
+	github.com/dgraph-io/badger/v4 v4.9.2
 	github.com/dgraph-io/ristretto/v2 v2.4.0
 	github.com/klauspost/compress v1.18.6
 	github.com/prometheus/client_golang v1.23.2
@@ -39,7 +39,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/protobuf v1.36.8 // indirect
