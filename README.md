@@ -148,6 +148,8 @@ cache:
 http:
   # How long a request to upstream can take at maximum
   timeout: 5m
+  # How long to wait for the initial headers
+  headers_timeout: 10s
 
 log:
     # The level at which to log

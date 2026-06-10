@@ -34,6 +34,7 @@ cache:
 admin_interface: localhost:8192
 http:
   timeout: 10s
+  headers_timeout: 1s
 metrics: false
 profiling: true
 log:
@@ -66,7 +67,7 @@ pypi_registries:
 			AdminInterface:  "localhost:8192",
 			EnableMetrics:   false,
 			EnableProfiling: true,
-			HTTPClient:      config.HTTPClient{10 * time.Second},
+			HTTPClient:      config.HTTPClient{10 * time.Second, 1 * time.Second},
 			Log:             config.Log{zerolog.ErrorLevel, "console"},
 			OciRegistries: []config.OciRegistry{
 				{
@@ -173,7 +174,7 @@ func TestCanSetOverridesViaEnvironment(t *testing.T) {
 			AdminInterface:  "0.0.0.0:1000",
 			EnableMetrics:   true,
 			EnableProfiling: true,
-			HTTPClient:      config.HTTPClient{5 * time.Minute},
+			HTTPClient:      config.HTTPClient{5 * time.Minute, 10 * time.Second},
 			Log:             config.Log{Level: zerolog.DebugLevel, Format: "console"},
 			AnsibleGalaxies: []config.AnsibleGalaxy{
 				{Upstream: "https://galaxy.ansible.com", Port: 3147},
