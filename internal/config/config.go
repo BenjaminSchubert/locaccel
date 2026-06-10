@@ -69,7 +69,8 @@ type Cache struct {
 }
 
 type HTTPClient struct {
-	Timeout time.Duration
+	Timeout        time.Duration
+	HeadersTimeout time.Duration `yaml:"headers_timeout"`
 }
 
 func getQuota(path string, quota units.DiskQuota) (units.Bytes, error) {
@@ -121,7 +122,7 @@ func getBaseConfig(envLookup func(string) (string, bool)) *Config {
 		},
 		AdminInterface: "localhost:3130",
 		EnableMetrics:  true,
-		HTTPClient:     HTTPClient{5 * time.Minute},
+		HTTPClient:     HTTPClient{5 * time.Minute, 10 * time.Second},
 		Log:            Log{zerolog.InfoLevel, "json"},
 	}
 }

@@ -53,7 +53,7 @@ func startServer(conf *config.Config, logger *zerolog.Logger) {
 			MaxConnsPerHost:       20,
 			MaxIdleConnsPerHost:   10,
 			IdleConnTimeout:       90 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: conf.HTTPClient.HeadersTimeout,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,
 		},
