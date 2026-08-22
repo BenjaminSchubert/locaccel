@@ -244,7 +244,7 @@ pypi_registries:
 
 proxies:
       # The list of allowed upstream hostnames that locaccel can proxy
-    - allowed_upstream:
+    - allowed_upstreams:
         # Debian packages
         - deb.debian.org
         # Ubuntu packages
