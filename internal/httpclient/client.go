@@ -552,10 +552,10 @@ func (c *Client) updateCache(
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	logger *zerolog.Logger,
 ) (*http.Response, error) {
-	if etag := resp.Header.Get("Etag"); etag != "" {
+	if etag := resp.Header.Get("ETag"); etag != "" {
 		for idx, cachedResp := range dbEntry.Value {
-			if httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("Etag")) {
-				logger.Trace().Str("etag", etag).Msg("conditional request matched by Etag")
+			if httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("ETag")) {
+				logger.Trace().Str("etag", etag).Msg("conditional request matched by ETag")
 				return c.refreshResponseAndServe(
 					cacheKey,
 					dbEntry,
@@ -653,7 +653,7 @@ func removeHopByHopHeaders(headers http.Header) {
 	// storage; see Section 7.6.1 of RFC 9110 for some examples.
 	headers.Del("Proxy-Connection")
 	headers.Del("Keep-Alive")
-	headers.Del("Te")
+	headers.Del("TE")
 	headers.Del("Trailer")
 	headers.Del("Transfer-Encoding")
 	headers.Del("Upgrade")

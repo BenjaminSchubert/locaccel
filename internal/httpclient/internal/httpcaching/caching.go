@@ -87,7 +87,7 @@ func IsCacheable(
 		return true, true
 	}
 
-	if val := r.Header.Get("Etag"); val != "" {
+	if val := r.Header.Get("ETag"); val != "" {
 		return true, true
 	}
 

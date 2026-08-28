@@ -436,13 +436,13 @@ func TestValidationEtag(t *testing.T) {
 							r.Header["If-None-Match"],
 							func(e string) bool { return e == originalEtag },
 						) {
-							w.Header().Add("Etag", validationEtag)
+							w.Header().Add("ETag", validationEtag)
 							w.Header().Add("Stale", "1")
 							w.WriteHeader(http.StatusNotModified)
 							return
 						}
 
-						w.Header().Add("Etag", originalEtag)
+						w.Header().Add("ETag", originalEtag)
 						_, err := w.Write([]byte("Hello!"))
 						assert.NoError(t, err)
 					}),
@@ -857,7 +857,7 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 			return
 		}
 
-		w.Header().Add("Etag", "123")
+		w.Header().Add("ETag", "123")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
 	}))
@@ -924,11 +924,11 @@ func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 		clock.Advance()
 		w.Header().Add("Cache-Control", "must-revalidate")
 		if slices.Contains(matches, "etag-match") {
-			w.Header().Add("Etag", "etag-match")
+			w.Header().Add("ETag", "etag-match")
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		w.Header().Add("Etag", "no-match")
+		w.Header().Add("ETag", "no-match")
 		_, err := w.Write([]byte("Hello!"))
 		assert.NoError(t, err)
 	}))

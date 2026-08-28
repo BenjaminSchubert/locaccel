@@ -27,7 +27,7 @@ func testEndpoint(t *testing.T) string {
 
 	srv := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Add("Etag", "123456")
+			w.Header().Add("ETag", "123456")
 			w.Header().Add("Cache-Control", "max-age=100")
 			_, err := w.Write([]byte("Hello!"))
 			assert.NoError(t, err)
