@@ -12,7 +12,8 @@ formatters:
         - default
         - localmodule
     gofumpt:
-      extra-rules: true
+      extra:
+        group-params: true
 
 linters:
   enable:
@@ -68,6 +69,8 @@ linters:
       disabled-checks:
         - httpNoBody
         - whyNoLint
+    goconst:
+      ignore-tests: true
     promlinter:
       strict: true
 

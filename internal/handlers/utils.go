@@ -245,7 +245,7 @@ func modifyBody(
 }
 
 func matchesOriginalQuery(headers http.Header, resp *http.Response) bool {
-	etag := resp.Header.Get("Etag")
+	etag := resp.Header.Get("ETag")
 	if etag != "" {
 		for _, match := range headers["If-None-Match"] {
 			if httpheaders.EtagsMatch(etag, match) {

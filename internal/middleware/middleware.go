@@ -110,12 +110,13 @@ func newMetricsMiddleware(
 	}
 
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"handler": handlerName}, registry)
+	labelNames := []string{"method", "code", "cache"}
 
 	requestsTotal := promauto.With(reg).NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "http_requests_total",
 			Help: "Tracks the number of HTTP requests.",
-		}, []string{"method", "code", "cache"},
+		}, labelNames,
 	)
 	requestDuration := promauto.With(reg).NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -123,7 +124,7 @@ func newMetricsMiddleware(
 			Help:    "Tracks the latencies for HTTP requests.",
 			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 60},
 		},
-		[]string{"method", "code", "cache"},
+		labelNames,
 	)
 	requestSize := promauto.With(reg).NewSummaryVec(
 		prometheus.SummaryOpts{
@@ -137,7 +138,7 @@ func newMetricsMiddleware(
 			Name: "http_response_size_bytes",
 			Help: "Tracks the size of HTTP responses.",
 		},
-		[]string{"method", "code", "cache"},
+		labelNames,
 	)
 	requestsInFlight := promauto.With(reg).NewGauge(
 		prometheus.GaugeOpts{

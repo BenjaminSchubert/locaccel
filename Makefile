@@ -1,10 +1,10 @@
-GOLANGCI_LINT_VERSION = 2.11.4
-AIR_VERSION = 1.65.0
+GOLANGCI_LINT_VERSION = 2.13.2
+AIR_VERSION = 1.67.4
 
 LOCACCEL_LOG_FORMAT ?= console
 LOCACCEL_LOG_LEVEL ?= debug
 
-.PHONY: all build lint fix test gopls-check start generate
+.PHONY: all build lint fix test gopls-check start generate clean
 
 start: .cache/bin/air
 	LOCACCEL_CACHE_PATH=.cache/locaccel LOCACCEL_LOG_FORMAT=$(LOCACCEL_LOG_FORMAT) LOCACCEL_LOG_LEVEL=$(LOCACCEL_LOG_LEVEL) $<
@@ -13,6 +13,10 @@ all: build lint gopls-check test
 
 build: generate
 	CGO_ENABLED=0 go build -ldflags '-s -w' -trimpath -o build/locaccel ./cmd/locaccel
+
+clean:
+	rm -rf .cache/ build/ .coverage
+	find . -name "*_gen.go" -or -name "*_gen_test.go" -delete
 
 lint: .cache/bin/golangci-lint generate
 	go mod tidy -diff
