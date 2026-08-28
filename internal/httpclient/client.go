@@ -458,7 +458,7 @@ func (c *Client) forwardRequest(
 	}
 
 	timeAtRequestCreated = c.now().UTC()
-	resp, err = c.client.Do(req) //nolint:gosec
+	resp, err = c.client.Do(req)
 	timeAtResponseReceived = c.now().UTC()
 
 	if err != nil {
