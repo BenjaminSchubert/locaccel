@@ -68,6 +68,8 @@ linters:
       disabled-checks:
         - httpNoBody
         - whyNoLint
+    goconst:
+      ignore-tests: true
     promlinter:
       strict: true
 
