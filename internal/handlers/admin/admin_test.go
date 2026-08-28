@@ -158,6 +158,101 @@ func TestCanDeleteKey(t *testing.T) {
 	require.Empty(t, stats)
 }
 
+func TestViewingUnknownKeysReturnProperError(t *testing.T) {
+	t.Parallel()
+
+	server, _ := getAdminServer(t, []string{"Unable to find entry in cache"})
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		server.URL+"/cache/unknown",
+		nil,
+	)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestReadingKeyWithNoFileSavedAnymoreReturnsError(t *testing.T) {
+	t.Parallel()
+
+	server, cache := getAdminServer(
+		t,
+		[]string{"Entry in cache doesn't have the content available"},
+	)
+	require.NoError(t, cache.New([]byte("mykey"), httpclient.CachedResponses{{ContentHash: "123"}}))
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		server.URL+"/cache/mykey",
+		nil,
+	)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+func TestCanViewKey(t *testing.T) {
+	t.Parallel()
+
+	key := "GET+http://locaccel.test/admin"
+
+	server, cache := getAdminServer(t, nil)
+	var hash string
+	f := cache.SetupIngestion(
+		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
+		func(h string) { hash = h },
+		func() {},
+		testutils.TestLogger(t, nil),
+	)
+	_, err := io.ReadAll(f)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	require.NoError(
+		t,
+		cache.New(
+			[]byte(key),
+			httpclient.CachedResponses{
+				{
+					ContentHash: hash,
+					StatusCode:  http.StatusNetworkAuthenticationRequired,
+					Headers:     http.Header{"Token": []string{"yes"}},
+				},
+			},
+		),
+	)
+
+	stats, err := cache.List(t.Context(), "locaccel.test", "test")
+	require.NoError(t, err)
+	require.Len(t, stats, 1)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		server.URL+"/cache/"+url.PathEscape(key),
+		nil,
+	)
+	require.NoError(t, err)
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+
+	t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusNetworkAuthenticationRequired, resp.StatusCode)
+	assert.Subset(t, resp.Header, http.Header{"Token": []string{"yes"}})
+	assert.Equal(t, []byte("hello world!"), data)
+}
+
 func TestCanListEntriesPerHostname(t *testing.T) {
 	t.Parallel()
 

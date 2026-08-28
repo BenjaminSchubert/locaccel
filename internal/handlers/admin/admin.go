@@ -4,7 +4,10 @@ import (
 	"embed"
 	"errors"
 	"html/template"
+	"io"
+	"maps"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/rs/zerolog/hlog"
@@ -43,8 +46,9 @@ func RegisterHandler(
 	middlewareStats *middleware.Statistics,
 ) error {
 	funcs := template.FuncMap{
-		"asBytes": units.PrettyBytes[uint64],
-		"join":    strings.Join,
+		"asBytes":   units.PrettyBytes[uint64],
+		"join":      strings.Join,
+		"uriEscape": url.QueryEscape,
 	}
 	templates, err := template.New("index").Funcs(funcs).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
@@ -99,6 +103,48 @@ func RegisterHandler(
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	handler.HandleFunc("GET /cache/{key}", func(w http.ResponseWriter, r *http.Request) {
+		logger := hlog.FromRequest(r)
+		key := r.PathValue("key")
+		entry := new(database.Entry[httpclient.CachedResponses])
+		if err := cache.Get([]byte(key), entry); err != nil {
+			logger.Error().Err(err).Msg("Unable to find entry in cache")
+			if errors.Is(err, database.ErrKeyNotFound) {
+				w.WriteHeader(http.StatusNotFound)
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+			return
+		}
+
+		if len(entry.Value) == 0 {
+			logger.Error().Err(err).Msg("Entry in cache doesn't have any responses attached")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		resp := entry.Value[0]
+
+		reader, err := cache.Open(resp.ContentHash, logger)
+		if err != nil {
+			logger.Error().Err(err).Msg("Entry in cache doesn't have the content available")
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		defer func() {
+			if err := reader.Close(); err != nil {
+				logger.Error().Err(err).Msg("Unable to close file from cache after reading")
+			}
+		}()
+
+		maps.Copy(w.Header(), resp.Headers)
+		w.WriteHeader(resp.StatusCode)
+
+		if _, err := io.Copy(w, reader); err != nil {
+			logger.Error().Err(err).Msg("Something happened while sending data back to client")
+		}
 	})
 
 	handler.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
