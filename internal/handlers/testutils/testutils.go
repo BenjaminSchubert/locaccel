@@ -168,7 +168,7 @@ func RunIntegrationTestsForHandler(
 				t,
 				handler,
 				handlerName,
-				"upstream",
+				"local",
 				logger,
 			)
 
