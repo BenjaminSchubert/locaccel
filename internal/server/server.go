@@ -114,8 +114,7 @@ func New(
 }
 
 func (s *Server) ListenAndServe() error {
-	errChan := make(chan error)
-	defer close(errChan)
+	errChan := make(chan error, len(s.servers))
 
 	for _, srv := range s.servers {
 		go func() {
@@ -400,7 +399,8 @@ func setupAdminInterface(
 			Msg("Enabling metrics")
 		handler.Handle(
 			"GET /metrics",
-			promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+			promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
+		)
 
 	}
 
