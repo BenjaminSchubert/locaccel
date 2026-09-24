@@ -35,14 +35,7 @@ func TestInstallGalaxyPackages(t *testing.T) {
 				testutils.NewClient(t, false, logger),
 				nil,
 			)
-			prox, _ := testutils.NewServer(
-				t,
-				handler,
-				"proxy",
-				"proxy",
-				testutils.NewRequestCounterMiddleware(t),
-				logger,
-			)
+			prox, _ := testutils.NewServer(t, handler, "proxy", "proxy", logger)
 
 			testutils.Execute(
 				t,
