@@ -24,4 +24,6 @@ func TestEtagHeadersMatch(t *testing.T) {
 func TestEtagHeadersDontMatch(t *testing.T) {
 	t.Parallel()
 	require.False(t, httpheaders.EtagsMatch("\"one\"", "\"two\""))
+	require.False(t, httpheaders.EtagsMatch("\"", "\"two\""))
+	require.False(t, httpheaders.EtagsMatch("\"one\"", "\""))
 }
