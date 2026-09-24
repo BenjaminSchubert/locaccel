@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"math"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,10 +78,15 @@ func TestCanEncodeToYamlForBytes(t *testing.T) {
 func TestCanGetBytesFromPercent(t *testing.T) {
 	t.Parallel()
 
+	dir := t.TempDir()
+
+	statfs := syscall.Statfs_t{}
+	require.NoError(t, syscall.Statfs(dir, &statfs))
+
 	quota := units.NewDiskQuotaInPercent(10)
-	b, err := quota.Bytes(t.TempDir())
+	b, err := quota.Bytes(dir)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, b.Bytes, int64(10))
+	require.Equal(t, int64(statfs.Bsize)*int64(statfs.Blocks)/10, b.Bytes) //nolint:gosec,unconvert
 }
 
 func TestCanGetBytesFromAbsolute(t *testing.T) {
