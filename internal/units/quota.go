@@ -69,7 +69,11 @@ func (d DiskQuota) Bytes(path string) (Bytes, error) {
 
 		// uint64 -> int64 might overflow, which will get negative bytes.
 		// fs.Bsize is int32 on MacOS, int64 on Linux and we can't set -all to unconvert via golangci-lint
-		return Bytes{int64(fs.Blocks) * int64(fs.Bsize)}, nil //nolint:gosec,unconvert
+		return Bytes{
+			int64(
+				float64(int64(fs.Blocks)*int64(fs.Bsize))*d.percent, //nolint:gosec,unconvert
+			) / 100,
+		}, nil
 	}
 
 	return d.bytes, nil
