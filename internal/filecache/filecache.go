@@ -255,6 +255,7 @@ outer:
 			fileInfo, err := os.Stat(filename)
 			if err != nil {
 				logger.Error().Err(err).Msg("An unexpected error happened trying to remove file")
+				continue
 			}
 			if fileInfo.ModTime().Unix() != timestamp {
 				logger.Debug().Str("filename", filename).Msg("file got it's timestamp updated since the check started, skipping")
