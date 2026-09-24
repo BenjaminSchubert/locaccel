@@ -22,8 +22,10 @@ func RegisterHandler(
 	caches := httpclient.UpstreamCache{Uris: upstreamCaches, Proxy: false}
 	sumdbUpstreams := make([]*url.URL, 0, len(upstreamCaches))
 	for _, uri := range upstreamCaches {
-		u := *uri
-		u.Path += "/sumdb/"
+		u := new(url.URL)
+		*u = *uri
+		u.Path += "/sumdb"
+		sumdbUpstreams = append(sumdbUpstreams, u)
 	}
 	sumdbCaches := httpclient.UpstreamCache{Uris: sumdbUpstreams, Proxy: false}
 
