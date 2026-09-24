@@ -25,9 +25,8 @@ import (
 )
 
 var (
-	TestLogger                  = tst.TestLogger
-	NewRequestCounterMiddleware = tst.NewRequestCounterMiddleware
-	ErrUnableToContactUpstream  = errors.New("unable to contact server")
+	TestLogger                 = tst.TestLogger
+	ErrUnableToContactUpstream = errors.New("unable to contact server")
 )
 
 type OfflineTransport struct{}
@@ -102,7 +101,6 @@ func NewServer(
 	t *testing.T,
 	handler http.Handler,
 	handlerName, handlerType string,
-	counterMiddleware *tst.RequestCounterMiddleware,
 	logger *zerolog.Logger,
 ) (*httptest.Server, *middleware.Statistics) {
 	t.Helper()
@@ -110,15 +108,12 @@ func NewServer(
 	stats := &middleware.Statistics{}
 
 	srv := httptest.NewServer(
-		counterMiddleware.GetHandler(
-			middleware.ApplyAllMiddlewares(
-				handler,
-				handlerName,
-				logger,
-				prometheus.NewPedanticRegistry(),
-				stats,
-			),
-			handlerType,
+		middleware.ApplyAllMiddlewares(
+			handler,
+			handlerName,
+			logger,
+			prometheus.NewPedanticRegistry(),
+			stats,
 		),
 	)
 	t.Cleanup(srv.Close)
@@ -147,7 +142,6 @@ func RunIntegrationTestsForHandler(
 
 			logger := TestLogger(t, nil)
 			var upstreams []*url.URL
-			counterMiddleware := NewRequestCounterMiddleware(t)
 
 			if useUpstreamCache {
 				upstreamLogger := logger.With().Str("type", "upstream").Logger()
@@ -158,7 +152,6 @@ func RunIntegrationTestsForHandler(
 					handler,
 					handlerName,
 					"upstream",
-					counterMiddleware,
 					&upstreamLogger,
 				)
 				upstream, err := url.Parse(server.URL)
@@ -176,7 +169,6 @@ func RunIntegrationTestsForHandler(
 				handler,
 				handlerName,
 				"upstream",
-				counterMiddleware,
 				logger,
 			)
 
@@ -193,7 +185,6 @@ func RunIntegrationTestsForHandler(
 
 		logger := TestLogger(t, expectedErrorMessagesWhenOffline)
 		handler := &http.ServeMux{}
-		counterMiddleware := NewRequestCounterMiddleware(t)
 		cachingClient, httpClient := NewClientWithUnderlyingClient(
 			t,
 			needsPrivateCache,
@@ -207,7 +198,6 @@ func RunIntegrationTestsForHandler(
 			handler,
 			handlerName,
 			"upstream",
-			counterMiddleware,
 			logger,
 		)
 
