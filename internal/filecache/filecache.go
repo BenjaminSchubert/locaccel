@@ -257,7 +257,7 @@ outer:
 				logger.Error().Err(err).Msg("An unexpected error happened trying to remove file")
 				continue
 			}
-			if fileInfo.ModTime().Unix() != timestamp {
+			if fileInfo.ModTime().UnixNano() != timestamp {
 				logger.Debug().Str("filename", filename).Msg("file got it's timestamp updated since the check started, skipping")
 				continue
 			}
@@ -305,7 +305,7 @@ func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles m
 				return 0, nil, err
 			}
 
-			timestamp := fileInfo.ModTime().UTC().Unix()
+			timestamp := fileInfo.ModTime().UTC().UnixNano()
 
 			timestampToFiles[timestamp] = append(
 				timestampToFiles[timestamp],
