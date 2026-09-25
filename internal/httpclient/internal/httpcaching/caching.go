@@ -12,6 +12,7 @@ import (
 
 func IsCacheable(
 	r *http.Response,
+	req *http.Request,
 	isPrivate bool,
 	logger *zerolog.Logger,
 ) (cacheable, explicitlyConfigured bool) {
@@ -72,7 +73,7 @@ func IsCacheable(
 		return isPrivate, true
 	}
 
-	if _, ok := r.Header["Authorization"]; ok && !isPrivate {
+	if _, ok := req.Header["Authorization"]; ok && !isPrivate {
 		if !cacheControl.MustRevalidate && !cacheControl.Public && cacheControl.SMaxAge == 0 {
 			return false, true
 		}

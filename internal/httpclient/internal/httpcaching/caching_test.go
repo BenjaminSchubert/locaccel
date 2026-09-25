@@ -19,31 +19,34 @@ func TestResponseIsCacheable(t *testing.T) {
 			description string
 			StatusCode  int
 			headers     http.Header
+			reqHeaders  http.Header
 			expected    bool
 			explicit    bool
 		}{
-			{"invalid-status-code", http.StatusNotFound, nil, false, true},
-			{"invalid-cache-control-header", http.StatusOK, http.Header{"Cache-Control": []string{"max-age=hello"}}, false, true},
-			{"no-store", http.StatusOK, http.Header{"Cache-Control": []string{"no-store"}}, false, true},
-			{"private", http.StatusOK, http.Header{"Cache-Control": []string{"private"}}, private, true},
-			{"authenticated-no-cache-control", http.StatusOK, http.Header{"Authorization": []string{}}, false, !private},
-			{"authenticated", http.StatusOK, http.Header{"Authorization": []string{}, "Cache-Control": []string{"max-age=10"}}, private, true},
-			{"authenticated-public", http.StatusOK, http.Header{"Authorization": []string{""}, "Cache-Control": []string{"public"}}, true, true},
-			{"range", http.StatusOK, http.Header{"Range": []string{"123"}}, false, true},
-			{"content-range", http.StatusOK, http.Header{"Content-Range": []string{"123"}}, false, true},
-			{"expires", http.StatusOK, http.Header{"Expires": []string{"123"}}, true, true},
-			{"last-modified", http.StatusOK, http.Header{"Last-Modified": []string{"Fri, 15 Dec 2023 11:01:18 GMT"}}, true, true},
-			{"last-modified-invalid", http.StatusOK, http.Header{"Last-Modified": []string{"Wrong date"}}, false, false},
-			{"etag", http.StatusOK, http.Header{"Etag": []string{"one"}}, true, true},
-			{"no-information", http.StatusOK, nil, false, false},
+			{"invalid-status-code", http.StatusNotFound, nil, nil, false, true},
+			{"invalid-cache-control-header", http.StatusOK, http.Header{"Cache-Control": []string{"max-age=hello"}}, nil, false, true},
+			{"no-store", http.StatusOK, http.Header{"Cache-Control": []string{"no-store"}}, nil, false, true},
+			{"private", http.StatusOK, http.Header{"Cache-Control": []string{"private"}}, nil, private, true},
+			{"authenticated-no-cache-control", http.StatusOK, nil, http.Header{"Authorization": []string{}}, false, !private},
+			{"authenticated", http.StatusOK, http.Header{"Cache-Control": []string{"max-age=10"}}, http.Header{"Authorization": []string{}}, private, true},
+			{"authenticated-public", http.StatusOK, http.Header{"Cache-Control": []string{"public"}}, http.Header{"Authorization": []string{""}}, true, true},
+			{"range", http.StatusOK, http.Header{"Range": []string{"123"}}, nil, false, true},
+			{"content-range", http.StatusOK, http.Header{"Content-Range": []string{"123"}}, nil, false, true},
+			{"expires", http.StatusOK, http.Header{"Expires": []string{"123"}}, nil, true, true},
+			{"last-modified", http.StatusOK, http.Header{"Last-Modified": []string{"Fri, 15 Dec 2023 11:01:18 GMT"}}, nil, true, true},
+			{"last-modified-invalid", http.StatusOK, http.Header{"Last-Modified": []string{"Wrong date"}}, nil, false, false},
+			{"etag", http.StatusOK, http.Header{"Etag": []string{"one"}}, nil, true, true},
+			{"no-information", http.StatusOK, nil, nil, false, false},
 		} {
 			t.Run(fmt.Sprintf("%s private=%t", tc.description, private), func(t *testing.T) {
 				t.Parallel()
 
+				req := http.Request{Header: tc.reqHeaders}
 				resp := http.Response{StatusCode: tc.StatusCode, Header: tc.headers}
 
 				isCacheable, explicit := httpcaching.IsCacheable(
 					&resp,
+					&req,
 					private,
 					testutils.TestLogger(t, nil),
 				)

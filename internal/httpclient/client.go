@@ -326,6 +326,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 
 	if isCacheable, explicitlyConfigured := httpcaching.IsCacheable(
 		resp,
+		req,
 		c.isPrivate,
 		logger,
 	); !isCacheable &&
