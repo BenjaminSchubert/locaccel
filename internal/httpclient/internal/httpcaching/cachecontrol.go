@@ -58,7 +58,7 @@ func ParseCacheControlDirective(
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
-							"%w for directive 'max-age: %s",
+							"%w for directive 'max-age': %w",
 							ErrInvalidArgument,
 							err,
 						)
@@ -82,7 +82,7 @@ func ParseCacheControlDirective(
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
-							"%w for directive 's-maxage': %s",
+							"%w for directive 's-maxage': %w",
 							ErrInvalidArgument,
 							err,
 						)
@@ -92,7 +92,7 @@ func ParseCacheControlDirective(
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
-							"%w for directive 'stale-while-revalidate': %s",
+							"%w for directive 'stale-while-revalidate': %w",
 							ErrInvalidArgument,
 							err,
 						)
@@ -102,7 +102,7 @@ func ParseCacheControlDirective(
 					v, err := strconv.Atoi(val)
 					if err != nil {
 						return response, fmt.Errorf(
-							"%w for directive 'stale-if-error': %s",
+							"%w for directive 'stale-if-error': %w",
 							ErrInvalidArgument,
 							err,
 						)
