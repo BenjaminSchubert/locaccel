@@ -107,7 +107,8 @@ func (c *Cache) GetStatistics(ctx context.Context, logId string) (CacheStatistic
 		Size    units.Bytes
 	}{}
 
-	err = c.db.Iterate(ctx,
+	err = c.db.Iterate(
+		ctx,
 		func(key []byte, responses *database.Entry[CachedResponses]) error {
 			uri, err := url.Parse(string(key))
 			if err != nil {
@@ -171,7 +172,8 @@ func (c *Cache) SetupIngestion(
 func (c *Cache) List(ctx context.Context, hostname, logId string) (CacheList, error) {
 	list := make(CacheList)
 
-	err := c.db.Iterate(ctx,
+	err := c.db.Iterate(
+		ctx,
 		func(key []byte, responses *database.Entry[CachedResponses]) error {
 			k := string(key)
 			uri, err := url.Parse(k)
@@ -226,7 +228,7 @@ func (c *Cache) CleanupOldEntries(logId string) {
 	filecacheLogger := logger.With().Str("component", "filecache").Logger()
 
 	// Prune files from the file cache
-	_, err := c.cache.Prune(&filecacheLogger)
+	_, existingHashes, err := c.cache.Prune(&filecacheLogger)
 	if err != nil {
 		if !errors.Is(err, filecache.ErrGCleanupNotRequired) {
 			logger.Error().Err(err).Msg("an error happened trying to reclaim space")
@@ -234,14 +236,8 @@ func (c *Cache) CleanupOldEntries(logId string) {
 		return
 	}
 
-	// Get all the files left
-	hashesList, err := c.cache.GetAllHashes()
-	if err != nil {
-		logger.Error().Err(err).Msg("unable to list all files in the cache during cleanup")
-	}
-
-	hashes := make(map[string]bool, len(hashesList))
-	for _, hash := range hashesList {
+	hashes := make(map[string]bool, len(existingHashes))
+	for hash := range existingHashes {
 		hashes[hash] = false
 	}
 
