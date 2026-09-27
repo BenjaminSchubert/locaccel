@@ -267,16 +267,26 @@ func TestCanRemoveOldFiles(t *testing.T) {
 		ingest(t, cache, content, logger)
 	}
 
-	count, err := cache.Prune(logger)
+	count, allHashes, err := cache.Prune(logger)
 	require.ErrorIs(t, err, filecache.ErrGCleanupNotRequired)
-	require.Equal(t, int64(0), count)
+	assert.Equal(t, map[string]struct{}{
+		"22896bcbc3d1c76a0b90c4c3523dbea532ad63196fafdbd52cced52200d3dae4": {},
+		"42f1d0a285aebbec81c29b9e334aaa322f6f24ac7d5f14c3b89aa50a9bc7b2d1": {},
+		"cd85637651ec7a557bddd61c5ddd1df21ad8bbbaf6c3c098482b3ed1c1014964": {},
+	}, allHashes)
+	assert.Equal(t, int64(0), count)
 
 	// Now we need cleaning
 	ingest(t, cache, "fourth", logger)
 
-	count, err = cache.Prune(logger)
+	count, allHashes, err = cache.Prune(logger)
 	require.NoError(t, err)
-	require.Equal(t, int64(3), count)
+	assert.Equal(t, int64(3), count)
+	assert.Equal(
+		t,
+		map[string]struct{}{"b20f46117e4ff694c5c5c655af80d57f35b21e4e9a213f92df4a08eaca0a3a30": {}},
+		allHashes,
+	)
 }
 
 func TestCanGetAllHashes(t *testing.T) {

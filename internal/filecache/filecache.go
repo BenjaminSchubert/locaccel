@@ -212,12 +212,14 @@ func (f *FileCache) GetStatistics() (count int64, totalSize units.Bytes, err err
 	return count, totalSize, err
 }
 
-func (f *FileCache) Prune(logger *zerolog.Logger) (int64, error) {
+func (f *FileCache) Prune(
+	logger *zerolog.Logger,
+) (removed int64, allHashes map[string]struct{}, err error) {
 	logger.Info().Msg("Pruning cache")
 
-	totalSize, files, err := f.getFilesAndTimestamps()
+	totalSize, allHashes, files, err := f.getFilesAndTimestamps()
 	if err != nil {
-		return 0, fmt.Errorf(
+		return 0, nil, fmt.Errorf(
 			"%s: %w",
 			"unable to determine whether garbage collection needs to happen",
 			err,
@@ -229,7 +231,7 @@ func (f *FileCache) Prune(logger *zerolog.Logger) (int64, error) {
 			Int64("diskUsage", totalSize).
 			Int64("maxQuota", f.quotaHigh).
 			Msg("No need to evict files, under threshold")
-		return 0, ErrGCleanupNotRequired
+		return 0, allHashes, ErrGCleanupNotRequired
 	}
 
 	logger.Info().
@@ -243,7 +245,7 @@ func (f *FileCache) Prune(logger *zerolog.Logger) (int64, error) {
 	}
 	slices.Sort(timestamps)
 
-	removed := int64(0)
+	removed = int64(0)
 
 outer:
 	for _, timestamp := range timestamps {
@@ -269,21 +271,24 @@ outer:
 				logger.Debug().Str("filename", filename).Int64("size", size).Msg("Removed file from cache")
 				totalSize -= size
 				removed += 1
+				hash := filename[len(filename)-65:len(filename)-63] + filename[len(filename)-62:]
+				delete(allHashes, hash)
 			}
 		}
 	}
 
 	logger.Info().Int64("files", removed).Int64("diskUsage", totalSize).Msg("Removed files")
-	return removed, nil
+	return removed, allHashes, nil
 }
 
-func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles map[int64][]string, err error) {
+func (f *FileCache) getFilesAndTimestamps() (totalSize int64, allHashes map[string]struct{}, timestampToFiles map[int64][]string, err error) {
 	dirs, err := os.ReadDir(f.root)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	timestampToFiles = make(map[int64][]string, 1000)
+	allHashes = make(map[string]struct{}, 1000)
 	var fileInfo os.FileInfo
 
 	for _, dir := range dirs {
@@ -296,13 +301,13 @@ func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles m
 
 		files, err := os.ReadDir(fullPath)
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, nil, err
 		}
 
 		for _, fp := range files {
 			fileInfo, err = fp.Info()
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, nil, err
 			}
 
 			timestamp := fileInfo.ModTime().UTC().UnixNano()
@@ -311,11 +316,12 @@ func (f *FileCache) getFilesAndTimestamps() (totalSize int64, timestampToFiles m
 				timestampToFiles[timestamp],
 				path.Join(fullPath, fp.Name()),
 			)
+			allHashes[dir.Name()+fp.Name()] = struct{}{}
 			totalSize += fileInfo.Size()
 		}
 	}
 
-	return totalSize, timestampToFiles, nil
+	return totalSize, allHashes, timestampToFiles, nil
 }
 
 func (f *FileCache) GetAllHashes() ([]string, error) {
