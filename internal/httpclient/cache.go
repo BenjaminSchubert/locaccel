@@ -233,7 +233,6 @@ func (c *Cache) CleanupOldEntries(logId string) {
 		if !errors.Is(err, filecache.ErrGCleanupNotRequired) {
 			logger.Error().Err(err).Msg("an error happened trying to reclaim space")
 		}
-		return
 	}
 
 	referenced := make(map[string]bool, len(existingHashes))
@@ -251,6 +250,15 @@ func (c *Cache) CleanupOldEntries(logId string) {
 	if err := c.db.RunGarbageCollector(); err != nil && !errors.Is(err, database.ErrNoRewrite) {
 		logger.Error().Err(err).Msg("an error happened trying to vacuum the database")
 		return
+	}
+
+	for hash, inUse := range referenced {
+		if !inUse {
+			logger.Debug().Str("hash", hash).Msg("Deleting unreferenced file")
+			if err := c.cache.Delete(hash, &logger); err != nil {
+				logger.Error().Err(err).Str("hash", hash).Msg("Error removing unreferenced file")
+			}
+		}
 	}
 }
 
