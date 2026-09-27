@@ -236,13 +236,13 @@ func (c *Cache) CleanupOldEntries(logId string) {
 		return
 	}
 
-	hashes := make(map[string]bool, len(existingHashes))
+	referenced := make(map[string]bool, len(existingHashes))
 	for hash := range existingHashes {
-		hashes[hash] = false
+		referenced[hash] = false
 	}
 
 	// Remove old entries from the database
-	err = c.removeUnusedDatabaseEntries(hashes, logId)
+	err = c.removeUnusedDatabaseEntries(referenced, logId)
 	if err != nil {
 		logger.Error().Err(err).Msg("unable to list all files in the cache during cleanup")
 	}
@@ -254,37 +254,47 @@ func (c *Cache) CleanupOldEntries(logId string) {
 	}
 }
 
-func (c *Cache) removeUnusedDatabaseEntries(knownHashes map[string]bool, logId string) error {
+func (c *Cache) removeUnusedDatabaseEntries(referenced map[string]bool, logId string) error {
+	knownMissing := make(map[string]struct{}, 10)
+
 	return c.db.Iterate(
 		context.Background(),
 		func(key []byte, value *database.Entry[CachedResponses]) error {
-			hasMissing := false
-
-			for _, resp := range value.Value {
-				if _, ok := knownHashes[resp.ContentHash]; ok {
-					knownHashes[resp.ContentHash] = true
-					continue
-				}
-				hasMissing = true
-			}
-
-			if hasMissing {
-				return c.pruneDatabaseEntry(key, value)
-			}
-			return nil
+			return c.pruneDatabaseEntry(key, value, referenced, knownMissing)
 		},
 		logId,
 	)
 }
 
-func (c *Cache) pruneDatabaseEntry(key []byte, value *database.Entry[CachedResponses]) error {
+func (c *Cache) pruneDatabaseEntry(
+	key []byte,
+	value *database.Entry[CachedResponses],
+	referenced map[string]bool,
+	missing map[string]struct{},
+) error {
 	validValues := make(CachedResponses, 0)
 	for _, resp := range value.Value {
-		_, err := c.cache.Stat(resp.ContentHash)
-		if err == nil {
+		if _, ok := referenced[resp.ContentHash]; ok {
+			referenced[resp.ContentHash] = true
 			validValues = append(validValues, resp)
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("unable to check existence for file %s: %w", resp.ContentHash, err)
+			continue
+		}
+
+		if _, ok := missing[resp.ContentHash]; !ok {
+			_, err := c.cache.Stat(resp.ContentHash)
+			switch {
+			case err == nil:
+				referenced[resp.ContentHash] = true
+				validValues = append(validValues, resp)
+			case errors.Is(err, fs.ErrNotExist):
+				missing[resp.ContentHash] = struct{}{}
+			default:
+				return fmt.Errorf(
+					"unable to check existence for file %s: %w",
+					resp.ContentHash,
+					err,
+				)
+			}
 		}
 	}
 
@@ -294,11 +304,19 @@ func (c *Cache) pruneDatabaseEntry(key []byte, value *database.Entry[CachedRespo
 	}
 
 	if len(validValues) == 0 {
-		return c.db.Delete(key, value)
+		// ErrConflict will get reconciled on next cleanup, ignore
+		if err := c.db.Delete(key, value); !errors.Is(err, database.ErrConflict) {
+			return err
+		}
+		return nil
 	}
 
 	value.Value = validValues
-	return c.db.Save(key, value)
+	// ErrConflict will get reconciled on next cleanup, ignore
+	if err := c.db.Save(key, value); !errors.Is(err, database.ErrConflict) {
+		return err
+	}
+	return nil
 }
 
 func (c *Cache) ManageCache() {
