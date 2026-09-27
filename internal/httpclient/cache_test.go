@@ -79,7 +79,7 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	return hash
 }
 
-func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Clock) {
+func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Clock, isUpdate bool) {
 	t.Helper()
 
 	responses := make(CachedResponses, len(data))
@@ -90,7 +90,14 @@ func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Cloc
 		responses[i].ContentHash = ingest(t, cache, d)
 	}
 
-	require.NoError(t, cache.db.New([]byte(key), responses))
+	if isUpdate {
+		entry := new(database.Entry[CachedResponses])
+		require.NoError(t, cache.db.Get([]byte(key), entry))
+		entry.Value = responses
+		require.NoError(t, cache.db.Save([]byte(key), entry))
+	} else {
+		require.NoError(t, cache.db.New([]byte(key), responses))
+	}
 }
 
 func TestCanGetStatisticsOnEmptyCache(t *testing.T) {
@@ -127,13 +134,14 @@ func TestCanGetStatistics(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
-	addEntry(t, cache, "https://one.test/hello", []string{"one"}, clock)
+	addEntry(t, cache, "https://one.test/hello", []string{"one"}, clock, false)
 	addEntry(
 		t,
 		cache,
 		"https://two.test/hello",
 		[]string{"two", "two-two"},
 		clock,
+		false,
 	)
 	addEntry(
 		t,
@@ -141,6 +149,7 @@ func TestCanGetStatistics(t *testing.T) {
 		"https://three.test/hello",
 		[]string{"three"},
 		clock,
+		false,
 	)
 	addEntry(
 		t,
@@ -148,6 +157,7 @@ func TestCanGetStatistics(t *testing.T) {
 		"https://three.test/hi",
 		[]string{"three-two"},
 		clock,
+		false,
 	)
 
 	stats, err := cache.GetStatistics(t.Context(), "test")
@@ -179,7 +189,7 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 	// Empty cache
 	cache.CleanupOldEntries("test")
 
-	addEntry(t, cache, "https://test.test", []string{"helloworld"}, clock)
+	addEntry(t, cache, "https://test.test", []string{"helloworld"}, clock, false)
 
 	// Under the limit
 	cache.CleanupOldEntries("test")
@@ -210,9 +220,9 @@ func TestCanCleanOldEntries(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cache.Close()) }()
 
-	addEntry(t, cache, "https://one.test", []string{"one"}, clock)
-	addEntry(t, cache, "https://two.test", []string{"two-one", "two-two"}, clock)
-	addEntry(t, cache, "https://three.test", []string{"three"}, clock)
+	addEntry(t, cache, "https://one.test", []string{"one"}, clock, false)
+	addEntry(t, cache, "https://two.test", []string{"two-one", "two-two"}, clock, false)
+	addEntry(t, cache, "https://three.test", []string{"three"}, clock, false)
 
 	require.NoError(
 		t,
@@ -261,6 +271,45 @@ func TestCanCleanOldEntries(t *testing.T) {
 					http.Header{},
 					http.Header{},
 					clock.Now().Add(-2 * time.Second).Local(),
+				},
+			},
+		},
+		nil,
+	)
+}
+
+func TestPrunesUnreferencedHashes(t *testing.T) {
+	t.Parallel()
+
+	clock := &Clock{time.Now()}
+	cachePath := t.TempDir()
+
+	cache, err := NewCache(
+		cachePath,
+		units.Bytes{Bytes: 15},
+		units.Bytes{Bytes: 20},
+		testutils.TestLogger(t, nil),
+	)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, cache.Close()) }()
+
+	addEntry(t, cache, "https://one.test", []string{"hello"}, clock, false)
+	addEntry(t, cache, "https://one.test", []string{"once"}, clock, true)
+	addEntry(t, cache, "https://one.test", []string{"again"}, clock, true)
+
+	cache.CleanupOldEntries("test")
+
+	validateCache(
+		t,
+		cache,
+		map[string]CachedResponses{
+			"https://one.test": {
+				{
+					"d426cea7d2d0e21785f97673cb8e357d4db7e95066056343bf670cd061b64325",
+					http.StatusOK,
+					http.Header{},
+					http.Header{},
+					clock.Now().Add(-time.Second).Local(),
 				},
 			},
 		},
