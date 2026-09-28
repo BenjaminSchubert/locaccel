@@ -134,6 +134,7 @@ func Parse(configPath string, envLookup func(string) (string, bool)) (*Config, e
 	if err != nil {
 		return c, err
 	}
+	defer func() { _ = fp.Close() }()
 
 	decoder := yaml.NewDecoder(fp)
 	decoder.KnownFields(true)

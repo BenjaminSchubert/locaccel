@@ -26,9 +26,9 @@ func LoadSavedStatistics(path string, logger *zerolog.Logger) (*Statistics, erro
 	fp, err := os.Open(path) //nolint:gosec
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			logger.Debug().Msg("Statistics don't exist. Creating new one")
 			return stats, nil
 		}
-		logger.Debug().Msg("Statistics don't exist. Creating new one")
 		return nil, err
 	}
 	defer func() {

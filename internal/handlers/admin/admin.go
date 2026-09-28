@@ -120,7 +120,7 @@ func RegisterHandler(
 		}
 
 		if len(entry.Value) == 0 {
-			logger.Error().Err(err).Msg("Entry in cache doesn't have any responses attached")
+			logger.Error().Msg("Entry in cache doesn't have any responses attached")
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
