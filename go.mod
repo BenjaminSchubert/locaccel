@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/dgraph-io/badger/v4 v4.9.6
 	github.com/dgraph-io/ristretto/v2 v2.4.2
-	github.com/klauspost/compress v1.19.2
+	github.com/klauspost/compress v1.20.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/rs/xid v1.6.0
 	github.com/rs/zerolog v1.35.1
