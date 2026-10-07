@@ -840,7 +840,7 @@ func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 	validateQueries([]string{"miss"})
 }
 
-func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
+func TestClientSupportsNotModifiedWithoutInformationIfOnlyOneKnownCachedEntry(t *testing.T) {
 	// Some Services don't implement http caching properly, e.g. ghcr.io
 	t.Parallel()
 
@@ -905,7 +905,109 @@ func TestClientRetriesQueryWithNoConditionalsIfUnableToFigureOut(t *testing.T) {
 			},
 		},
 	}, nil)
-	validateQueries([]string{"miss", "miss"})
+	validateQueries([]string{"miss", "revalidated"})
+	assert.Equal(t, 2, count, "Upstream should have been called 2 times")
+}
+
+func TestClientSupportsNotModifiedWithoutInformationIfCanMatchToOnlyOneKnownVaryBasedCachedEntry(
+	t *testing.T,
+) {
+	// Some Services don't implement http caching properly, e.g. ghcr.io
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	count := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count += 1
+		w.Header().Add("Cache-Control", "public")
+		w.Header().Add("Vary", "Test")
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		clock.Advance()
+		if count > 2 && r.Header.Get("If-None-Match") != "" {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		w.Header().Add("ETag", r.Header.Get("Test"))
+		_, err := w.Write([]byte("Hello " + r.Header.Get("Test"))) //nolint:gosec
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	// First Vary-Headers query
+	resp, body := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"Test": []string{"first"}},
+		nil,
+	)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "Hello first", body)
+
+	// Second Vary-Headers query
+	resp2, body2 := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"Test": []string{"second"}},
+		nil,
+	)
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello second", body2)
+
+	// Now First again, should hit cache
+	resp3, body3 := makeRequest( //nolint:bodyclose
+		t,
+		client,
+		http.MethodGet,
+		srv.URL,
+		http.Header{"Test": []string{"first"}},
+		nil,
+	)
+	assert.Equal(t, 200, resp3.StatusCode)
+	assert.Equal(t, "Hello first", body3)
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"491981d6478d3a29bc8d21913f9c2b3bc93ea8d67fcc5c75b1f6f2b8b416a45b",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"11"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-1 * time.Second).Format(http.TimeFormat),
+					},
+					"Etag": []string{"first"},
+					"Vary": []string{"Test"},
+				},
+				http.Header{"Test": []string{"first"}},
+				clock.Now().Add(-1 * time.Second).Local(),
+			},
+			{
+				"a567411660feaad241cf38fa0f1344f71550adf533773c12c1d4a4d90e04d6a1",
+				200,
+				http.Header{
+					"Cache-Control":  []string{"public"},
+					"Content-Length": []string{"12"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-2 * time.Second).Format(http.TimeFormat),
+					},
+					"Etag": []string{"second"},
+					"Vary": []string{"Test"},
+				},
+				http.Header{"Test": []string{"second"}},
+				clock.Now().Add(-2 * time.Second).Local(),
+			},
+		},
+	}, nil)
+	validateQueries([]string{"miss", "miss", "revalidated"})
 	assert.Equal(t, 3, count, "Upstream should have been called 3 times")
 }
 

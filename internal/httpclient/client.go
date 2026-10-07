@@ -283,6 +283,8 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 			cacheKey,
 			dbEntry,
 			resp,
+			req,
+			wasOriginalRequestConditional,
 			timeAtRequestCreated,
 			timeAtResponseReceived,
 			logger,
@@ -550,6 +552,8 @@ func (c *Client) updateCache(
 	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
 	resp *http.Response,
+	originalReq *http.Request,
+	wasOriginalRequestConditional bool,
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	logger *zerolog.Logger,
 ) (*http.Response, error) {
@@ -587,6 +591,50 @@ func (c *Client) updateCache(
 				), nil
 			}
 		}
+	}
+
+	// Upstream request was conditional, we can't find an explicit match. Passthrough
+	if wasOriginalRequestConditional {
+		return nil, errNoMatchingEntryInCache
+	}
+
+	// No direct match, do we have Vary-Headers or a single response?
+	respIdx := 0
+	if len(dbEntry.Value) != 1 {
+		matchingVaryHeaders := []int{}
+
+		for idx, cachedResp := range dbEntry.Value {
+			if httpcaching.MatchVaryHeaders(originalReq.Header, cachedResp.VaryHeaders, logger) {
+				matchingVaryHeaders = append(matchingVaryHeaders, idx)
+			}
+		}
+
+		if len(matchingVaryHeaders) == 1 {
+			respIdx = matchingVaryHeaders[0]
+		} else {
+			return nil, errNoMatchingEntryInCache
+		}
+	}
+
+	// This deviates from the spec, but some upstream don't follow it, e.g. docker.io
+	// Thus let's see if we can map back to a proper response for sure
+	ifNoneMatch := originalReq.Header.Values("If-None-Match")
+	cachedETag := dbEntry.Value[respIdx].Headers.Values("ETag")
+
+	if len(ifNoneMatch) == 1 && len(cachedETag) == 1 &&
+		httpheaders.EtagMatchesAny(cachedETag[0], ifNoneMatch) {
+		logger.Trace().
+			Str("etag", ifNoneMatch[0]).
+			Msg("conditional request matched from single request If-None-Match")
+		return c.refreshResponseAndServe(
+			cacheKey,
+			dbEntry,
+			respIdx,
+			resp,
+			timeAtRequestCreated,
+			timeAtResponseReceived,
+			logger,
+		), nil
 	}
 
 	return nil, errNoMatchingEntryInCache
