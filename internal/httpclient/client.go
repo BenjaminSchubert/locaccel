@@ -555,7 +555,7 @@ func (c *Client) updateCache(
 ) (*http.Response, error) {
 	if etag := resp.Header.Get("ETag"); etag != "" {
 		for idx, cachedResp := range dbEntry.Value {
-			if httpheaders.EtagsMatch(etag, cachedResp.Headers.Get("ETag")) {
+			if httpheaders.EtagMatchesAny(etag, cachedResp.Headers.Values("ETag")) {
 				logger.Trace().Str("etag", etag).Msg("conditional request matched by ETag")
 				return c.refreshResponseAndServe(
 					cacheKey,
