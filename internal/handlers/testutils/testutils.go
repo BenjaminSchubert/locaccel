@@ -29,6 +29,8 @@ var (
 	ErrUnableToContactUpstream = errors.New("unable to contact server")
 )
 
+type ReadCloserNotifier = tst.ReadCloserNotifier
+
 type OfflineTransport struct{}
 
 func (o *OfflineTransport) RoundTrip(r *http.Request) (*http.Response, error) {

@@ -125,8 +125,13 @@ func TestCanDeleteKey(t *testing.T) {
 
 	server, cache := getAdminServer(t, nil)
 	var hash string
+	notify := make(chan struct{}, 1)
+
 	f := cache.SetupIngestion(
-		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
+		testutils.ReadCloserNotifier{
+			Reader: bytes.NewReader([]byte("hello world!")),
+			Notify: notify,
+		},
 		func(h string) { hash = h },
 		func() {},
 		testutils.TestLogger(t, nil),
@@ -134,6 +139,7 @@ func TestCanDeleteKey(t *testing.T) {
 	_, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
+	<-notify
 	require.NoError(t, cache.New([]byte(key), httpclient.CachedResponses{{ContentHash: hash}}))
 
 	stats, err := cache.List(t.Context(), "locaccel.test", "test")
@@ -207,8 +213,13 @@ func TestCanViewKey(t *testing.T) {
 
 	server, cache := getAdminServer(t, nil)
 	var hash string
+	notify := make(chan struct{}, 1)
+
 	f := cache.SetupIngestion(
-		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
+		testutils.ReadCloserNotifier{
+			Reader: bytes.NewReader([]byte("hello world!")),
+			Notify: notify,
+		},
 		func(h string) { hash = h },
 		func() {},
 		testutils.TestLogger(t, nil),
@@ -216,6 +227,7 @@ func TestCanViewKey(t *testing.T) {
 	_, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
+	<-notify
 	require.NoError(
 		t,
 		cache.New(
@@ -258,8 +270,12 @@ func TestCanListEntriesPerHostname(t *testing.T) {
 
 	server, cache := getAdminServer(t, nil)
 	var hash string
+	notify := make(chan struct{}, 1)
 	f := cache.SetupIngestion(
-		io.NopCloser(bytes.NewReader([]byte("hello world!"))),
+		testutils.ReadCloserNotifier{
+			Reader: bytes.NewReader([]byte("hello world!")),
+			Notify: notify,
+		},
 		func(h string) { hash = h },
 		func() {},
 		testutils.TestLogger(t, nil),
@@ -267,6 +283,8 @@ func TestCanListEntriesPerHostname(t *testing.T) {
 	_, err := io.ReadAll(f)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
+	<-notify
+
 	require.NoError(
 		t,
 		cache.New(

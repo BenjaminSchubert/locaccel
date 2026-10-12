@@ -84,6 +84,8 @@ func (c *Cache) Close() error {
 		return nil
 	}
 
+	c.cache.WaitUntilNoJobsInFlight()
+
 	close(c.stopSignal)
 	c.stopWait.Wait()
 	err := c.db.Close()

@@ -64,6 +64,7 @@ func setup(
 		),
 		clock,
 		func(expectedResponses map[string]CachedResponses, expectedHashes []string) {
+			client.WaitUntilNoJobsInFlight()
 			validateCache(t, cache, expectedResponses, expectedHashes)
 		},
 		func(expected []string) { assert.Equal(t, expected, hits) }
@@ -91,6 +92,8 @@ func makeRequest(
 	bodyB, err := io.ReadAll(resp.Body)
 	assert.NoError(t, resp.Body.Close())
 	require.NoError(t, err)
+
+	client.WaitUntilNoJobsInFlight()
 
 	return resp, string(bodyB)
 }

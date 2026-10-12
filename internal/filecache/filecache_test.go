@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -32,9 +33,10 @@ func ingest(
 
 	var hash string
 
+	notify := make(chan struct{}, 1)
 	buf := bytes.NewBufferString(content)
 	reader := cache.SetupIngestion(
-		io.NopCloser(buf),
+		testutils.ReadCloserNotifier{Reader: buf, Notify: notify},
 		func(h string) { hash = h },
 		func() {},
 		logger,
@@ -43,6 +45,7 @@ func ingest(
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 
+	<-notify
 	return hash
 }
 
@@ -53,11 +56,11 @@ func TestCanIngestAndRecover(t *testing.T) {
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
-	computedHash := ""
+	ingested := make(chan string, 1)
 
 	reader := cache.SetupIngestion(
 		io.NopCloser(bytes.NewBufferString(testData)),
-		func(hash string) { computedHash = hash },
+		func(hash string) { ingested <- hash },
 		func() {},
 		logger,
 	)
@@ -66,8 +69,8 @@ func TestCanIngestAndRecover(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, testData, string(data))
 
-	err = reader.Close()
-	require.NoError(t, err)
+	computedHash := <-ingested
+	require.NoError(t, reader.Close())
 	assert.Equal(
 		t,
 		"d12e417e04494572b561ba2c12c3d7f9e5107c4747e27b9a8a54f8480c63e841",
@@ -90,17 +93,20 @@ func TestHandlesConcurrentWrites(t *testing.T) {
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
+	notify1 := make(chan struct{}, 1)
+	notify2 := make(chan struct{}, 1)
+
 	hash1 := ""
 	hash2 := ""
 
 	reader1 := cache.SetupIngestion(
-		io.NopCloser(bytes.NewBufferString(testData)),
+		testutils.ReadCloserNotifier{Reader: bytes.NewBufferString(testData), Notify: notify1},
 		func(hash string) { hash1 = hash },
 		func() {},
 		logger,
 	)
 	reader2 := cache.SetupIngestion(
-		io.NopCloser(bytes.NewBufferString(testData)),
+		testutils.ReadCloserNotifier{Reader: bytes.NewBufferString(testData), Notify: notify2},
 		func(hash string) { hash2 = hash },
 		func() {},
 		logger,
@@ -113,6 +119,9 @@ func TestHandlesConcurrentWrites(t *testing.T) {
 	data, err = io.ReadAll(reader2)
 	require.NoError(t, err)
 	assert.Equal(t, testData, string(data))
+
+	<-notify1
+	<-notify2
 
 	require.NoError(t, reader1.Close())
 	require.NoError(t, reader2.Close())
@@ -129,8 +138,9 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	cache, err := filecache.NewFileCache(cacheDir, 100, 1000, logger)
 	require.NoError(t, err)
 
+	notify := make(chan struct{}, 1)
 	reader := cache.SetupIngestion(
-		io.NopCloser(iotest.ErrReader(errTest)),
+		testutils.ReadCloserNotifier{Reader: iotest.ErrReader(errTest), Notify: notify},
 		func(hash string) { assert.Fail(t, "Hash should not have been called") },
 		func() {},
 		logger,
@@ -140,6 +150,7 @@ func TestHandlesErrorsWhileWriting(t *testing.T) {
 	require.ErrorIs(t, err, errTest)
 
 	require.NoError(t, reader.Close())
+	<-notify // Ensure it's finalized so we catch the error on logs
 }
 
 func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
@@ -163,31 +174,6 @@ func TestDoesNotIngestFilesThatAreTooBig(t *testing.T) {
 	require.NoError(t, reader.Close())
 }
 
-func TestDoesNotCommitFileThatWasNotReadFully(t *testing.T) {
-	t.Parallel()
-
-	cacheDir := t.TempDir()
-	logger := testutils.TestLogger(
-		t,
-		[]string{"The file to ingest was not read fully before closing. Skipping ingestion"},
-	)
-
-	cache, err := filecache.NewFileCache(cacheDir, 100, 10000, logger)
-	require.NoError(t, err)
-
-	reader := cache.SetupIngestion(
-		io.NopCloser(bytes.NewBufferString("hello world!")),
-		func(hash string) { assert.Fail(t, "Hash should not have been called") },
-		func() {},
-		logger,
-	)
-
-	n, err := reader.Read(make([]byte, 5))
-	require.NoError(t, err)
-	assert.Equal(t, 5, n)
-	require.NoError(t, reader.Close())
-}
-
 func TestReturnsErrorOpeningNonExistentFile(t *testing.T) {
 	t.Parallel()
 
@@ -208,17 +194,19 @@ func TestCanStatFile(t *testing.T) {
 	cache, err := filecache.NewFileCache(t.TempDir(), 100, 1000, logger)
 	require.NoError(t, err)
 
-	var hash string
+	ingested := make(chan string, 1)
 
 	buf := bytes.NewBufferString("hello world!")
 	reader := cache.SetupIngestion(
 		io.NopCloser(buf),
-		func(h string) { hash = h },
+		func(h string) { ingested <- h },
 		func() {},
 		logger,
 	)
 	output, err := io.ReadAll(reader)
 	require.NoError(t, err)
+
+	hash := <-ingested
 	require.NoError(t, reader.Close())
 
 	stat, err := cache.Stat(hash)
@@ -243,11 +231,14 @@ func TestCanGetStatistics(t *testing.T) {
 	}
 
 	// tmp should be ignored
-	buf := bytes.NewBufferString("six")
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
-	_, err = io.ReadAll(reader)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, reader.Close()) })
+	r := testutils.NewSlowReader([]byte("six"), 10*time.Millisecond)
+	reader := cache.SetupIngestion(r, func(string) {}, func() {}, logger)
+	t.Cleanup(func() {
+		require.NoError(t, r.Close())
+		_, err = io.ReadAll(reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+	})
 
 	count, totalSize, err = cache.GetStatistics()
 	assert.Equal(t, int64(5), count)
@@ -306,11 +297,15 @@ func TestCanGetAllHashes(t *testing.T) {
 	}
 
 	// tmp should be ignored
-	buf := bytes.NewBufferString("three")
-	reader := cache.SetupIngestion(io.NopCloser(buf), func(string) {}, func() {}, logger)
-	_, err = io.ReadAll(reader)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, reader.Close()) })
+	r := testutils.NewSlowReader([]byte("three"), 30*time.Millisecond)
+	reader := cache.SetupIngestion(r, func(string) {}, func() {}, logger)
+	t.Cleanup(func() {
+		cache.WaitUntilNoJobsInFlight()
+		require.NoError(t, r.Close())
+		_, err = io.ReadAll(reader)
+		require.NoError(t, err)
+		require.NoError(t, reader.Close())
+	})
 
 	hashes, err := cache.GetAllHashes()
 	require.NoError(t, err)

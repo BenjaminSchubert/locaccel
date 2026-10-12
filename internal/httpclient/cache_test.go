@@ -65,9 +65,10 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	t.Helper()
 
 	var hash string
+	notify := make(chan struct{}, 1)
 
 	reader := cache.cache.SetupIngestion(
-		io.NopCloser(bytes.NewBufferString(content)),
+		testutils.ReadCloserNotifier{Reader: bytes.NewBufferString(content), Notify: notify},
 		func(h string) { hash = h },
 		func() {},
 		cache.logger,
@@ -76,6 +77,7 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	require.NoError(t, err)
 	require.NoError(t, reader.Close())
 
+	<-notify
 	return hash
 }
 
