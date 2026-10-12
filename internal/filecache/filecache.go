@@ -14,7 +14,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/zeebo/blake3"
 
-	"github.com/benjaminschubert/locaccel/internal/teereader"
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
@@ -28,16 +27,23 @@ var (
 			return blake3.New()
 		},
 	}
+	bytesPool = sync.Pool{
+		New: func() any {
+			buffer := make([]byte, 1024*128)
+			return &buffer
+		},
+	}
 )
 
 const tmpDirName = "_tmp"
 
 type FileCache struct {
-	root      string
-	tmpdir    string
-	quotaLow  int64
-	quotaHigh int64
-	logger    *zerolog.Logger
+	root           string
+	tmpdir         string
+	quotaLow       int64
+	quotaHigh      int64
+	logger         *zerolog.Logger
+	workInFlightWg sync.WaitGroup
 }
 
 func NewFileCache(
@@ -71,7 +77,7 @@ func NewFileCache(
 		}
 	}
 
-	return &FileCache{root, tmpdir, quotaLow, quotaHigh, logger}, nil
+	return &FileCache{root, tmpdir, quotaLow, quotaHigh, logger, sync.WaitGroup{}}, nil
 }
 
 func (f *FileCache) SetupIngestion(
@@ -80,79 +86,82 @@ func (f *FileCache) SetupIngestion(
 	onCleanup func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
+	f.workInFlightWg.Add(1)
 	dest, err := os.CreateTemp(f.tmpdir, "ingest-XXX")
 	if err != nil {
 		logger.Error().Err(err).Msg("Unable to create temporary file")
+		f.workInFlightWg.Done()
 		return src
 	}
 
 	hasher := hashPool.Get().(*blake3.Hasher)
 	hasher.Reset()
-	wasCalled := false
 
-	return teereader.New(
-		src,
-		io.MultiWriter(dest, hasher),
-		func(totalread int, readErr, writeErr error) error {
-			if wasCalled {
-				return ErrAlreadyClosed
+	// temporary Reader
+	rfp, err := os.Open(dest.Name())
+	if err != nil {
+		f.workInFlightWg.Done()
+		panic("Unable to open file a second time for reading, this should not happen")
+	}
+
+	buf := bytesPool.Get().(*[]byte)
+	writer := newNotifyingWriter(dest)
+	tempReader := newTemporaryFileReaderWithPoll(rfp, writer.notify)
+
+	go func() {
+		defer f.workInFlightWg.Done()
+		defer bytesPool.Put(buf)
+		defer hashPool.Put(hasher)
+		defer onCleanup()
+
+		written, err := io.CopyBuffer(io.MultiWriter(writer, hasher), src, *buf)
+		if err != nil {
+			tempReader.markCompleted(err)
+			logger.Error().Err(err).Msg("an error happened ingesting the file")
+			f.cleanup(src, dest, logger)
+			return
+		}
+
+		tempReader.markCompleted(nil)
+
+		if written > (f.quotaHigh / 2) {
+			logger.Warn().Int64("size", written).Msg("File is too big for the cache. Skipping")
+			f.cleanup(src, dest, logger)
+			return
+		}
+
+		hash := hex.EncodeToString(hasher.Sum(nil))
+		if err := os.Rename(
+			dest.Name(),
+			path.Join(f.root, hash[:2], hash[2:]),
+		); err != nil {
+			logger.Error().Err(err).Msg("unable to rename file for ingestion")
+			f.cleanup(src, dest, logger)
+			return
+		}
+
+		if err := dest.Close(); err != nil {
+			logger.Error().Err(err).Msg("Unable to close temporary file after ingestion")
+			if err2 := src.Close(); err2 != nil {
+				logger.Error().Err(err2).Msg("Unable to close upstream connection after ingestion")
 			}
-			wasCalled = true
+			return
+		}
 
-			defer hashPool.Put(hasher)
-			defer onCleanup()
+		onIngest(hash)
+		if err := src.Close(); err != nil {
+			logger.Error().Err(err).Msg("Unable to close upstream connection after ingestion")
+		}
+	}()
 
-			if totalread > (int(f.quotaHigh) / 2) {
-				logger.Warn().Int("size", totalread).Msg("File is too big for the cache. Skipping")
-				return f.cleanup(src, dest, logger)
-			}
-
-			if readErr != nil || writeErr != nil {
-				err := readErr
-				reason := "Read Error"
-				if err == nil {
-					err = writeErr
-					reason = "Write Error"
-				}
-
-				logger.Error().
-					Str("reason", reason).
-					Err(err).
-					Msg("an error happened ingesting the file")
-				return f.cleanup(src, dest, logger)
-			}
-
-			// Was the entire content read? Otherwise fail
-			n, err := src.Read(make([]byte, 1))
-			if err != io.EOF || n != 0 {
-				logger.Error().
-					Err(err).
-					Msg("The file to ingest was not read fully before closing. Skipping ingestion")
-				return f.cleanup(src, dest, logger)
-			}
-
-			hash := hex.EncodeToString(hasher.Sum(nil))
-
-			if err := os.Rename(
-				dest.Name(),
-				path.Join(f.root, hash[:2], hash[2:]),
-			); err != nil {
-				logger.Error().Err(err).Msg("unable to rename file for ingestion")
-				return f.cleanup(src, dest, logger)
-			}
-
-			if err := dest.Close(); err != nil {
-				logger.Error().Err(err).Msg("Unable to close temporary file after ingestion")
-				return src.Close()
-			}
-
-			onIngest(hash)
-			return src.Close()
-		},
-	)
+	return tempReader
 }
 
-func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File, logger *zerolog.Logger) error {
+func (f *FileCache) WaitUntilNoJobsInFlight() {
+	f.workInFlightWg.Wait()
+}
+
+func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File, logger *zerolog.Logger) {
 	if e := dest.Close(); e != nil {
 		logger.Error().Err(e).Msg("error closing temporary file.")
 	}
@@ -160,7 +169,9 @@ func (f *FileCache) cleanup(src io.ReadCloser, dest *os.File, logger *zerolog.Lo
 		logger.Error().Err(e).Msg("error removing temporary file.")
 	}
 
-	return src.Close()
+	if err := src.Close(); err != nil {
+		logger.Error().Err(err).Msg("Error cleaning up ingestion of file")
+	}
 }
 
 func (f *FileCache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, error) {

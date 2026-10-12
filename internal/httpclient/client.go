@@ -203,6 +203,10 @@ func readAndCloseUpstreamBody(resp *http.Response, logger *zerolog.Logger) {
 	}
 }
 
+func (c *Client) WaitUntilNoJobsInFlight() {
+	c.cache.cache.WaitUntilNoJobsInFlight()
+}
+
 func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Response, error) {
 	logger := hlog.FromRequest(req)
 
@@ -412,6 +416,8 @@ func (c *Client) forwardRequestWithUpstream(
 	logger *zerolog.Logger,
 ) (resp *http.Response, timeAtRequestCreated, timeAtResponseReceived time.Time, err error) {
 	var buildUpstreamRequest func(r *http.Request, upstreamCache *url.URL) *http.Request
+	// Detach the context so we can ingest files properly
+	req = req.WithContext(context.WithoutCancel(req.Context()))
 
 	if upstreamCache.Proxy {
 		buildUpstreamRequest = func(r *http.Request, upstream *url.URL) *http.Request {
@@ -495,6 +501,10 @@ func (c *Client) setupIngestion(
 	dbEntry *database.Entry[CachedResponses],
 	logger *zerolog.Logger,
 ) io.ReadCloser {
+	statusCode := resp.StatusCode
+	respHeaders := resp.Header.Clone()
+	reqHeaders := req.Header.Clone()
+
 	return c.cache.SetupIngestion(
 		resp.Body,
 		func(hash string) {
@@ -502,11 +512,11 @@ func (c *Client) setupIngestion(
 
 			cacheResp := CachedResponse{
 				hash,
-				resp.StatusCode,
-				resp.Header.Clone(),
-				httpcaching.ExtractVaryHeaders(req.Header, resp.Header),
+				statusCode,
+				respHeaders,
+				httpcaching.ExtractVaryHeaders(reqHeaders, respHeaders),
 				httpcaching.GetEstimatedResponseCreation(
-					resp.Header,
+					respHeaders,
 					timeAtRequestCreated,
 					timeAtResponseReceived,
 					logger,
@@ -519,7 +529,7 @@ func (c *Client) setupIngestion(
 				// Do we match a vary headers and should replace it?
 				for idx := range dbEntry.Value {
 					if httpcaching.MatchVaryHeaders(
-						req.Header,
+						reqHeaders,
 						dbEntry.Value[idx].VaryHeaders,
 						logger,
 					) {
