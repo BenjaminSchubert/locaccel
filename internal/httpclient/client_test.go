@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,13 +36,18 @@ func setup(
 	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
 
 	hits := []string{}
+	hitsMutex := sync.Mutex{}
 
 	return New(
 			&http.Client{Transport: &http.Transport{}},
 			cache,
 			logger,
 			false,
-			func(r *http.Request, status string) { hits = append(hits, status) },
+			func(r *http.Request, status string) {
+				hitsMutex.Lock()
+				hits = append(hits, status)
+				hitsMutex.Unlock()
+			},
 			clock.Now,
 			clock.Since,
 		),
@@ -101,7 +108,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	validateQueries([]string{"miss"})
 }
 
-func TestClientDoesNotCachedErrors(t *testing.T) {
+func TestClientDoesNotCacheErrors(t *testing.T) {
 	t.Parallel()
 
 	client, _, validateCache, validateQueries := setup(t)
@@ -1319,4 +1326,154 @@ func TestDoesntReturnCachedEntryFromNonExplicitlyCacheableEntriesUnlessDisconnec
 		},
 	}, []string{"0c182ae20fca17b0e8c3e79cacdd80dbc1f84b55d379191ff7ecaf860d9bf2fd", "20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b"})
 	validateQueries([]string{"miss", "miss", "hit", "hit"})
+}
+
+func TestServesDeduplicatedQueries(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+
+	var calls atomic.Int32
+	releaseBody := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		w.Header().Add("Content-Length", "6")
+
+		calls.Add(1)
+		clock.Advance()
+
+		w.WriteHeader(http.StatusOK)
+		_ = http.NewResponseController(w).Flush()
+
+		<-releaseBody
+
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	newReq := func() *http.Request {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		req = req.WithContext(testutils.TestLogger(t, nil).WithContext(req.Context()))
+		return req
+	}
+
+	resp1, err := client.Do(newReq(), UpstreamCache{})
+	require.NoError(t, err)
+
+	resp2, err := client.Do(newReq(), UpstreamCache{})
+	require.NoError(t, err)
+
+	close(releaseBody)
+
+	body1, err := io.ReadAll(resp1.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp1.Body.Close())
+
+	body2, err := io.ReadAll(resp2.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp2.Body.Close())
+
+	assert.Equal(t, 200, resp1.StatusCode)
+	assert.Equal(t, "Hello!", string(body1))
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello!", string(body2))
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Date": []string{
+						clock.Now().Add(-1 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				http.Header{},
+				clock.Now().Add(-1 * time.Second).Local(),
+			},
+		},
+	}, []string{"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec"})
+	validateQueries([]string{"miss", "hit"})
+	require.Equal(t, int32(1), calls.Load())
+}
+
+func TestDoesNotDeduplicateQueriesWithDifferentHeaders(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	var calls atomic.Int32
+	releaseBody := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		w.Header().Add("Content-Length", "6")
+
+		calls.Add(1)
+		clock.Advance()
+
+		w.WriteHeader(http.StatusOK)
+		_ = http.NewResponseController(w).Flush()
+
+		<-releaseBody
+
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	newReq := func(hdrs http.Header) *http.Request {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+		require.NoError(t, err)
+		for k, vs := range hdrs {
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
+		}
+		req = req.WithContext(testutils.TestLogger(t, nil).WithContext(req.Context()))
+		return req
+	}
+
+	resp1, err := client.Do(newReq(http.Header{"Authorization": []string{"1"}}), UpstreamCache{})
+	require.NoError(t, err)
+
+	resp2, err := client.Do(newReq(nil), UpstreamCache{})
+	require.NoError(t, err)
+
+	close(releaseBody)
+
+	body1, err := io.ReadAll(resp1.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp1.Body.Close())
+
+	body2, err := io.ReadAll(resp2.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp2.Body.Close())
+
+	assert.Equal(t, 200, resp1.StatusCode)
+	assert.Equal(t, "Hello!", string(body1))
+	assert.Equal(t, 200, resp2.StatusCode)
+	assert.Equal(t, "Hello!", string(body2))
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Date": []string{
+						clock.Now().Add(-1 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				http.Header{},
+				clock.Now().Add(-1 * time.Second).Local(),
+			},
+		},
+	}, []string{"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec"})
+	validateQueries([]string{"miss", "miss"})
+	require.Equal(t, int32(2), calls.Load())
 }
