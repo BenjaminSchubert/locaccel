@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -119,7 +120,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	validateQueries([]string{"miss"})
 }
 
-func TestClientDoesNotCachedErrors(t *testing.T) {
+func TestClientDoesNotCacheErrors(t *testing.T) {
 	t.Parallel()
 
 	client, _, validateCache, validateQueries := setup(t)
@@ -1337,4 +1338,136 @@ func TestDoesntReturnCachedEntryFromNonExplicitlyCacheableEntriesUnlessDisconnec
 		},
 	}, []string{"0c182ae20fca17b0e8c3e79cacdd80dbc1f84b55d379191ff7ecaf860d9bf2fd", "20206e4354b041abf0cfd09f5094762ecfd6b61313f53ee4b93fc98410ed400b"})
 	validateQueries([]string{"miss", "miss", "hit", "hit"})
+}
+
+func TestServesDeduplicatedQueries(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	counter := 0
+	headerSentWg := sync.WaitGroup{}
+	headerSentWg.Add(1)
+	sendBodyWg := sync.WaitGroup{}
+	sendBodyWg.Add(1)
+	queriesDoneWg := sync.WaitGroup{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		counter += 1
+		clock.Advance()
+		headerSentWg.Done()
+		sendBodyWg.Wait()
+
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	queriesDoneWg.Go(func() {
+		resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "Hello!", body)
+	})
+
+	headerSentWg.Wait()
+
+	queriesDoneWg.Go(func() {
+		resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "Hello!", body)
+	})
+
+	time.Sleep(10 * time.Millisecond)
+	sendBodyWg.Done()
+	queriesDoneWg.Wait()
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-1 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				http.Header{},
+				clock.Now().Add(-1 * time.Second).Local(),
+			},
+		},
+	}, []string{"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec"})
+	validateQueries([]string{"miss", "hit"})
+	require.Equal(t, 1, counter)
+}
+
+func TestDoesNotDeduplicateQueriesWithDifferentHeaders(t *testing.T) {
+	t.Parallel()
+
+	client, clock, validateCache, validateQueries := setup(t)
+	counter := 0
+	headerSentMutex := sync.Mutex{}
+	headerSentMutex.Lock()
+	sendBodyMutex := sync.Mutex{}
+	sendBodyMutex.Lock()
+	queriesDoneWg := sync.WaitGroup{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		counter += 1
+		clock.Advance()
+		headerSentMutex.Unlock()
+		sendBodyMutex.Lock()
+		defer sendBodyMutex.Unlock()
+
+		_, err := w.Write([]byte("Hello!"))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(srv.Close)
+
+	queriesDoneWg.Go(func() {
+		resp, body := makeRequest( //nolint:bodyclose
+			t,
+			client,
+			http.MethodGet,
+			srv.URL,
+			http.Header{"Authorization": []string{"1"}},
+			nil,
+		)
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "Hello!", body)
+	})
+
+	headerSentMutex.Lock()
+
+	queriesDoneWg.Go(func() {
+		resp, body := makeRequest(t, client, http.MethodGet, srv.URL, nil, nil) //nolint:bodyclose
+		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, "Hello!", body)
+	})
+
+	time.Sleep(10 * time.Millisecond)
+	sendBodyMutex.Unlock()
+	queriesDoneWg.Wait()
+
+	validateCache(map[string]CachedResponses{
+		"GET+" + srv.URL: {
+			{
+				"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec",
+				200,
+				http.Header{
+					"Content-Length": []string{"6"},
+					"Content-Type":   []string{"text/plain; charset=utf-8"},
+					"Date": []string{
+						clock.Now().Add(-1 * time.Second).Format(http.TimeFormat),
+					},
+				},
+				http.Header{},
+				clock.Now().Add(-1 * time.Second).Local(),
+			},
+		},
+	}, []string{"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec"})
+	validateQueries([]string{"miss", "miss"})
+	require.Equal(t, 2, counter)
 }

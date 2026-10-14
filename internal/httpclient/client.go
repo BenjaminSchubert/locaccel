@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +20,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/database"
 	"github.com/benjaminschubert/locaccel/internal/httpclient/internal/httpcaching"
 	"github.com/benjaminschubert/locaccel/internal/httpheaders"
+	"github.com/benjaminschubert/locaccel/internal/multistream"
 )
 
 var (
@@ -30,13 +34,89 @@ var (
 	}
 )
 
+type queryInFlight struct {
+	req         *http.Request
+	respHeaders http.Header
+	respBody    io.ReadCloser
+	statusCode  int
+	wg          sync.WaitGroup
+}
+
+func newQueryInFlight(req *http.Request) *queryInFlight {
+	q := &queryInFlight{req, nil, nil, 0, sync.WaitGroup{}}
+	q.wg.Add(1)
+	return q
+}
+
+func (q *queryInFlight) set(resp *http.Response) {
+	defer q.wg.Done()
+	if resp == nil {
+		return
+	}
+
+	switch resp.Body.(type) {
+	case *multistream.StreamingFileReader:
+	case *os.File:
+	default:
+		return
+	}
+
+	q.respBody = resp.Body
+	q.respHeaders = resp.Header.Clone()
+	q.statusCode = resp.StatusCode
+}
+
+func (q *queryInFlight) waitForResponse(
+	timeout time.Duration,
+	logger *zerolog.Logger,
+) *http.Response {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		q.wg.Wait()
+	}()
+
+	select {
+	case <-c:
+		if q.respBody == nil {
+			return nil
+		}
+
+		var reader io.ReadCloser
+		var err error
+
+		switch b := q.respBody.(type) {
+		case *multistream.StreamingFileReader:
+			reader, err = b.Clone()
+		case *os.File:
+			reader, err = os.Open(b.Name())
+		default:
+			panic("BUG: unable to figure type of respBody")
+		}
+
+		if err != nil {
+			logger.Warn().Err(err).Msg("Error trying to clone response for deduplication")
+			return nil
+		}
+
+		return &http.Response{
+			Body:       reader,
+			Header:     q.respHeaders.Clone(),
+			StatusCode: q.statusCode,
+		}
+	case <-time.After(timeout):
+		return nil
+	}
+}
+
 type Client struct {
-	client    *http.Client
-	cache     *Cache
-	isPrivate bool
-	notify    func(r *http.Request, status string)
-	now       func() time.Time
-	since     func(time.Time) time.Duration
+	client          *http.Client
+	cache           *Cache
+	isPrivate       bool
+	notify          func(r *http.Request, status string)
+	now             func() time.Time
+	since           func(time.Time) time.Duration
+	queriesInFlight sync.Map // map[string]*queryInFlight
 }
 
 type proxyCtx struct{}
@@ -69,7 +149,7 @@ func New(
 
 		return proxy.(*url.URL), nil
 	}
-	return &Client{client, cache, isPrivate, notify, now, since}
+	return &Client{client, cache, isPrivate, notify, now, since, sync.Map{}}
 }
 
 func buildKey(req *http.Request) []byte {
@@ -234,11 +314,55 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	logger.Debug().Msg("unable to serve from cache")
-	resp, runCleanup, err := c.serveFromUpstream(req, dbEntry, cacheKey, upstreamCache, onCleanup, logger)
+	resp, runCleanup, err := c.serveDeduplicated(
+		req,
+		dbEntry,
+		cacheKey,
+		upstreamCache,
+		onCleanup,
+		logger,
+	)
 	if runCleanup {
 		onCleanup()
 	}
 	return resp, err
+}
+
+func (c *Client) serveDeduplicated(
+	req *http.Request,
+	dbEntry *database.Entry[CachedResponses],
+	cacheKey []byte,
+	upstreamCache UpstreamCache,
+	onCleanup func(),
+	logger *zerolog.Logger,
+) (*http.Response, bool, error) {
+	inFlightCacheKey := c.buildDedupeKey(cacheKey, req, logger)
+
+	inFlightForUrl, ok := c.queriesInFlight.LoadOrStore(inFlightCacheKey, newQueryInFlight(req))
+	inFlight := inFlightForUrl.(*queryInFlight)
+	if ok {
+		resp := inFlight.waitForResponse(5*time.Second, logger)
+		if resp != nil {
+			logger.Debug().Msg("Request deduplicated")
+			c.notify(req, "hit")
+			return resp, true, nil
+		}
+	}
+
+	resp, runCleanup, err := c.serveFromUpstream(
+		req,
+		dbEntry,
+		cacheKey,
+		upstreamCache,
+		func() { c.cancelInFlight(inFlightCacheKey); onCleanup() },
+		logger,
+	)
+	inFlight.set(resp)
+	if runCleanup {
+		c.cancelInFlight(inFlightCacheKey)
+	}
+
+	return resp, runCleanup, err
 }
 
 func (c *Client) serveFromUpstream(
@@ -737,4 +861,30 @@ func removeHopByHopHeaders(headers http.Header) {
 	headers.Del("Proxy-Authenticate")
 	headers.Del("Proxy-Authentication-Info")
 	headers.Del("Proxy-Authorization")
+}
+
+func (c *Client) buildDedupeKey(cacheKey []byte, req *http.Request, logger *zerolog.Logger) string {
+	keyBuilder := strings.Builder{}
+	keyBuilder.Write(cacheKey)
+
+	headerKeys := slices.Sorted(maps.Keys(req.Header))
+	logger.Trace().Strs("headers", headerKeys).Msg("Selected headers for in-flight deduplication")
+
+	for _, key := range headerKeys {
+		val := req.Header[key]
+		keyBuilder.WriteByte('\x1f')
+		keyBuilder.WriteString(key)
+		keyBuilder.WriteByte('=')
+		for _, v := range val[:len(val)-1] {
+			keyBuilder.WriteString(v)
+			keyBuilder.WriteByte(',')
+		}
+		keyBuilder.WriteString(val[len(val)-1])
+	}
+
+	return keyBuilder.String()
+}
+
+func (c *Client) cancelInFlight(cacheKey string) {
+	c.queriesInFlight.Delete(cacheKey)
 }
