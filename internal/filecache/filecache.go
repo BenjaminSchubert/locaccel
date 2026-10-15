@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/zeebo/blake3"
 
+	"github.com/benjaminschubert/locaccel/internal/multistream"
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
@@ -97,16 +98,13 @@ func (f *FileCache) SetupIngestion(
 	hasher := hashPool.Get().(*blake3.Hasher)
 	hasher.Reset()
 
-	// temporary Reader
-	rfp, err := os.Open(dest.Name())
+	buf := bytesPool.Get().(*[]byte)
+	writer := multistream.NewPublisher(dest)
+	stream, err := multistream.NewStreamingFileReader(dest.Name(), writer)
 	if err != nil {
 		f.workInFlightWg.Done()
 		panic("Unable to open file a second time for reading, this should not happen")
 	}
-
-	buf := bytesPool.Get().(*[]byte)
-	writer := newNotifyingWriter(dest)
-	tempReader := newTemporaryFileReaderWithPoll(rfp, writer.notify)
 
 	go func() {
 		defer f.workInFlightWg.Done()
@@ -116,13 +114,13 @@ func (f *FileCache) SetupIngestion(
 
 		written, err := io.CopyBuffer(io.MultiWriter(writer, hasher), src, *buf)
 		if err != nil {
-			tempReader.markCompleted(err)
+			writer.Finish(err)
 			logger.Error().Err(err).Msg("an error happened ingesting the file")
 			f.cleanup(src, dest, logger)
 			return
 		}
 
-		tempReader.markCompleted(nil)
+		writer.Finish(nil)
 
 		if written > (f.quotaHigh / 2) {
 			logger.Warn().Int64("size", written).Msg("File is too big for the cache. Skipping")
@@ -154,7 +152,7 @@ func (f *FileCache) SetupIngestion(
 		}
 	}()
 
-	return tempReader
+	return stream
 }
 
 func (f *FileCache) WaitUntilNoJobsInFlight() {

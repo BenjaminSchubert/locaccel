@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"testing"
 	"testing/iotest"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -231,9 +230,10 @@ func TestCanGetStatistics(t *testing.T) {
 	}
 
 	// tmp should be ignored
-	r := testutils.NewSlowReader([]byte("six"), 10*time.Millisecond)
+	r := testutils.NewStuckReader([]byte("six"))
 	reader := cache.SetupIngestion(r, func(string) {}, func() {}, logger)
 	t.Cleanup(func() {
+		r.Free()
 		require.NoError(t, r.Close())
 		_, err = io.ReadAll(reader)
 		require.NoError(t, err)
@@ -298,9 +298,10 @@ func TestCanGetAllHashes(t *testing.T) {
 	}
 
 	// tmp should be ignored
-	r := testutils.NewSlowReader([]byte("three"), 30*time.Millisecond)
+	r := testutils.NewStuckReader([]byte("three"))
 	reader := cache.SetupIngestion(r, func(string) {}, func() {}, logger)
 	t.Cleanup(func() {
+		r.Free()
 		cache.WaitUntilNoJobsInFlight()
 		require.NoError(t, r.Close())
 		_, err = io.ReadAll(reader)

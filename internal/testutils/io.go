@@ -2,20 +2,21 @@ package testutils
 
 import (
 	"io"
-	"time"
+	"sync"
 )
 
-type SlowReader struct {
-	data  []byte
-	delay time.Duration
+type StuckReader struct {
+	released chan struct{}
+	once     sync.Once
+	data     []byte
 }
 
-func NewSlowReader(data []byte, delay time.Duration) *SlowReader {
-	return &SlowReader{data, delay}
+func NewStuckReader(data []byte) *StuckReader {
+	return &StuckReader{released: make(chan struct{}), data: data}
 }
 
-func (s *SlowReader) Read(out []byte) (int, error) {
-	time.Sleep(s.delay)
+func (s *StuckReader) Read(out []byte) (int, error) {
+	<-s.released
 
 	if len(s.data) == 0 {
 		return 0, io.EOF
@@ -28,11 +29,15 @@ func (s *SlowReader) Read(out []byte) (int, error) {
 	return nWrite, nil
 }
 
-func (s *SlowReader) Close() error {
+func (s *StuckReader) Free() {
+	s.once.Do(func() { close(s.released) })
+}
+
+func (s *StuckReader) Close() error {
 	return nil
 }
 
-var _ io.ReadCloser = (*SlowReader)(nil)
+var _ io.ReadCloser = (*StuckReader)(nil)
 
 type ReadCloserNotifier struct {
 	io.Reader
