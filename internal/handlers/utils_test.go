@@ -161,7 +161,7 @@ func TestReturnsErrorOnTimeoutFromUpstream(t *testing.T) {
 	httpClient, underlyingClient := testutils.NewClientWithUnderlyingClient(
 		t, false, func(r *http.Request, s string) {}, testutils.TestLogger(t, nil),
 	)
-	underlyingClient.Timeout = 5 * time.Millisecond
+	underlyingClient.Timeout = 2 * time.Millisecond
 
 	recorder := httptest.NewRecorder()
 
