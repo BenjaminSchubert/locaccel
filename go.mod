@@ -12,6 +12,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/tinylib/msgp v1.6.4
 	github.com/zeebo/blake3 v0.2.4
+	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -37,7 +38,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
