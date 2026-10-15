@@ -237,6 +237,18 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		logger.Debug().Err(err).Msg("unable to retrieve entry from database, no response fresh")
 	}
 
+	logger.Debug().Msg("unable to serve from cache")
+	resp, releaseDBEntry, err := c.serveFromUpstream(req, dbEntry, cacheKey, upstreamCache, logger)
+	return resp, err
+}
+
+func (c *Client) serveFromUpstream(
+	req *http.Request,
+	dbEntry *database.Entry[CachedResponses],
+	cacheKey []byte,
+	upstreamCache UpstreamCache,
+	logger *zerolog.Logger,
+) (*http.Response, bool, error) {
 	hasConditionalInformation := false
 	wasOriginalRequestConditional := false
 	originalRequest := req.Clone(req.Context())
@@ -247,8 +259,6 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 			dbEntry,
 		)
 	}
-
-	logger.Debug().Msg("unable to serve from cache")
 
 	resp, timeAtRequestCreated, timeAtResponseReceived, err := c.forwardRequestWithUpstream(
 		req,
@@ -265,10 +275,10 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 					Err(err).
 					Msg("unable to contact upstream, serving stale response from cache")
 				c.notify(req, "hit")
-				return cRep, nil
+				return cRep, true, nil
 			}
 		}
-		return resp, err
+		return resp, true, err
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		if dbEntry.Version() != 0 {
@@ -277,7 +287,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 				logger.Warn().
 					Msg("upstream returned 429 Too Many Requests, serving stale response from cache")
 				c.notify(req, "hit")
-				return cRep, nil
+				return cRep, true, nil
 			}
 		}
 	}
@@ -299,12 +309,12 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		if cacheResp != nil {
 			logger.Debug().Msg("request re-validated, serving from cache")
 			c.notify(req, "revalidated")
-			return cacheResp, nil
+			return cacheResp, true, nil
 		}
 		if wasOriginalRequestConditional {
 			logger.Debug().Msg("passing through conditional response from conditional request")
 			c.notify(req, "miss")
-			return resp, nil
+			return resp, true, nil
 		}
 
 		logger.Warn().
@@ -321,10 +331,10 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 						Err(err).
 						Msg("unable to contact upstream, serving stale response from cache")
 					c.notify(req, "hit")
-					return cRep, nil
+					return cRep, true, nil
 				}
 			}
-			return resp, err
+			return resp, true, err
 		}
 	}
 
@@ -338,10 +348,9 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	); !isCacheable &&
 		explicitlyConfigured {
 		logger.Debug().Msg("request is not cacheable")
-		return resp, nil
+		return resp, true, nil
 	}
 
-	releaseDBEntry = false
 	resp.Body = c.setupIngestion(
 		req,
 		resp,
@@ -351,7 +360,7 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 		dbEntry,
 		logger,
 	)
-	return resp, nil
+	return resp, false, nil
 }
 
 func (c *Client) addConditionalRequestInformation(
