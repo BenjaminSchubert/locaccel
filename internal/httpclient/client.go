@@ -219,18 +219,14 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 
 	cacheKey := buildKey(req)
 	dbEntry := cachedResponsesPool.Get().(*database.Entry[CachedResponses])
-	releaseDBEntry := true
-	defer func() {
-		if releaseDBEntry {
-			cachedResponsesPool.Put(dbEntry)
-		}
-	}()
+	onCleanup := func() { cachedResponsesPool.Put(dbEntry) }
 
 	if err := c.cache.Get(cacheKey, dbEntry); err == nil {
 		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
 			logger.Debug().Msg("serving response from cache")
 			c.notify(req, "hit")
+			onCleanup()
 			return resp, nil
 		}
 	} else if !errors.Is(err, database.ErrKeyNotFound) {
@@ -238,7 +234,10 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	logger.Debug().Msg("unable to serve from cache")
-	resp, releaseDBEntry, err := c.serveFromUpstream(req, dbEntry, cacheKey, upstreamCache, logger)
+	resp, runCleanup, err := c.serveFromUpstream(req, dbEntry, cacheKey, upstreamCache, onCleanup, logger)
+	if runCleanup {
+		onCleanup()
+	}
 	return resp, err
 }
 
@@ -247,6 +246,7 @@ func (c *Client) serveFromUpstream(
 	dbEntry *database.Entry[CachedResponses],
 	cacheKey []byte,
 	upstreamCache UpstreamCache,
+	onCleanup func(),
 	logger *zerolog.Logger,
 ) (*http.Response, bool, error) {
 	hasConditionalInformation := false
@@ -358,6 +358,7 @@ func (c *Client) serveFromUpstream(
 		timeAtResponseReceived,
 		cacheKey,
 		dbEntry,
+		onCleanup,
 		logger,
 	)
 	return resp, false, nil
@@ -508,6 +509,7 @@ func (c *Client) setupIngestion(
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
+	onCleanup func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
 	statusCode := resp.StatusCode
@@ -562,7 +564,7 @@ func (c *Client) setupIngestion(
 				logger.Debug().Msg("request saved in the database")
 			}
 		},
-		func() { cachedResponsesPool.Put(dbEntry) },
+		onCleanup,
 		logger,
 	)
 }
