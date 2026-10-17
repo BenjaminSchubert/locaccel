@@ -4,10 +4,12 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/benjaminschubert/locaccel/internal/handlers"
@@ -69,6 +71,46 @@ func TestInstallPythonPackages(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestHandlesNotModified(t *testing.T) {
+	t.Parallel()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("ETag", "1234")
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer upstream.Close()
+
+	logger := testutils.TestLogger(t, nil)
+	handler := &http.ServeMux{}
+	RegisterHandler(
+		upstream.URL+"/simple",
+		upstream.URL+"/cdn",
+		handler,
+		testutils.NewClient(t, false, logger),
+		nil,
+	)
+	proxy, _ := testutils.NewServer(t, handler, "proxy", "proxy", logger)
+
+	req, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		proxy.URL+"/simple/package-1",
+		nil,
+	)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusNotModified, resp.StatusCode)
+	assert.Empty(t, string(data))
+	assert.Equal(t, []string{"1234"}, resp.Header.Values("ETag"))
+	require.NoError(t, resp.Body.Close())
 }
 
 func BenchmarkJSONRewrite(b *testing.B) {

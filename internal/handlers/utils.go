@@ -114,7 +114,8 @@ func Forward(
 		}
 	}()
 
-	if resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp) {
+	if resp.StatusCode == http.StatusNotModified ||
+		(resp.StatusCode == http.StatusOK && matchesOriginalQuery(r.Header, resp)) {
 		maps.Copy(w.Header(), resp.Header)
 		w.WriteHeader(http.StatusNotModified)
 		return
