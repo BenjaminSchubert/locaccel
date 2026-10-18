@@ -81,7 +81,14 @@ func ingest(t *testing.T, cache *Cache, content string) string {
 	return hash
 }
 
-func addEntry(t *testing.T, cache *Cache, key string, data []string, clock *Clock, isUpdate bool) {
+func addEntry(
+	t *testing.T,
+	cache *Cache,
+	key string,
+	data []string,
+	clock *testutils.Clock,
+	isUpdate bool,
+) {
 	t.Helper()
 
 	responses := make(CachedResponses, len(data))
@@ -125,7 +132,7 @@ func TestCanGetStatisticsOnEmptyCache(t *testing.T) {
 func TestCanGetStatistics(t *testing.T) {
 	t.Parallel()
 
-	clock := &Clock{}
+	clock := testutils.NewClock(t)
 
 	cache, err := NewCache(
 		t.TempDir(),
@@ -177,7 +184,7 @@ func TestCanGetStatistics(t *testing.T) {
 func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 	t.Parallel()
 
-	clock := &Clock{}
+	clock := testutils.NewClock(t)
 
 	cache, err := NewCache(
 		t.TempDir(),
@@ -210,7 +217,7 @@ func TestDoesNotCleanOldEntriesWithCacheUnderLimit(t *testing.T) {
 func TestCanCleanOldEntries(t *testing.T) {
 	t.Parallel()
 
-	clock := &Clock{time.Now()}
+	clock := testutils.NewClock(t)
 	cachePath := t.TempDir()
 
 	cache, err := NewCache(
@@ -283,7 +290,7 @@ func TestCanCleanOldEntries(t *testing.T) {
 func TestPrunesUnreferencedHashes(t *testing.T) {
 	t.Parallel()
 
-	clock := &Clock{time.Now()}
+	clock := testutils.NewClock(t)
 	cachePath := t.TempDir()
 
 	cache, err := NewCache(
