@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -115,16 +116,17 @@ func New(
 
 func (s *Server) ListenAndServe() error {
 	errChan := make(chan error, len(s.servers))
+	startupDone := sync.WaitGroup{}
 
 	for _, srv := range s.servers {
-		go func() {
+		startupDone.Go(func() {
 			srv.logger.Info().Str("address", srv.server.Addr).Msg("Starting server")
 			err := srv.server.ListenAndServe()
 			if !errors.Is(err, http.ErrServerClosed) {
 				srv.logger.Error().Err(err).Msg("Server didn't come up properly")
 				errChan <- err
 			}
-		}()
+		})
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -160,6 +162,8 @@ func (s *Server) ListenAndServe() error {
 		}
 	}
 
+	// Ensure no server goroutine outlives this function
+	startupDone.Wait()
 	return lastErr
 }
 
