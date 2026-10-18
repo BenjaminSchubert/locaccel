@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -9,11 +10,14 @@ import (
 
 type LogRecordHook struct {
 	ErrorMessages []string
+	mu            sync.Mutex
 }
 
 func (l *LogRecordHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
 	if level >= zerolog.ErrorLevel {
+		l.mu.Lock()
 		l.ErrorMessages = append(l.ErrorMessages, msg)
+		l.mu.Unlock()
 	}
 }
 
