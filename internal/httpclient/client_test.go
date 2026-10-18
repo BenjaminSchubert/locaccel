@@ -20,32 +20,14 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
-type Clock struct {
-	current time.Time
-}
-
-func (c *Clock) Since(t time.Time) time.Duration {
-	return c.current.Sub(t)
-}
-
-func (c *Clock) Now() time.Time {
-	return c.current
-}
-
-func (c *Clock) Advance() {
-	c.current = c.current.Add(time.Second)
-}
-
 func setup(
 	t *testing.T,
-) (client *Client, clock *Clock, valCache func(map[string]CachedResponses, []string), valQueries func([]string)) {
+) (client *Client, clock *testutils.Clock, valCache func(map[string]CachedResponses, []string), valQueries func([]string)) {
 	t.Helper()
 
 	cachePath := t.TempDir()
 	logger := testutils.TestLogger(t, nil)
-	testTime, err := time.Parse(time.RFC3339, "2024-01-01T12:13:14Z")
-	require.NoError(t, err)
-	clock = &Clock{testTime}
+	clock = testutils.NewClock(t)
 
 	cache, err := NewCache(cachePath, units.Bytes{Bytes: 100}, units.Bytes{Bytes: 1000}, logger)
 	require.NoError(t, err)

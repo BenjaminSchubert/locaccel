@@ -114,43 +114,47 @@ func TestGetFreshness(t *testing.T) {
 func TestGetCurrentAge(t *testing.T) {
 	t.Parallel()
 
+	clock := testutils.NewClock(t)
+
 	estimatedResponseCreation := GetEstimatedResponseCreation(
 		http.Header{
 			"Age":  []string{"60"},
-			"Date": []string{time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
+			"Date": []string{clock.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
 		},
-		time.Now().Add(-time.Second*40),
-		time.Now().Add(-time.Second*30),
+		clock.Now().Add(-time.Second*40),
+		clock.Now().Add(-time.Second*30),
 		testutils.TestLogger(t, nil),
-		time.Now,
+		clock.Now,
 	)
 	require.Equal(
 		t,
-		time.Now().Add(-time.Second*120).Truncate(time.Second),
+		clock.Now().Add(-time.Second*120).Truncate(time.Second),
 		estimatedResponseCreation.Truncate(time.Second),
 	)
 
-	age := GetCurrentAge(estimatedResponseCreation, time.Since)
+	age := GetCurrentAge(estimatedResponseCreation, clock.Since)
 	require.Equal(t, time.Second*time.Duration(120), age)
 }
 
 func TestGetCurrentAgeHandlesInvalidAgeValues(t *testing.T) {
 	t.Parallel()
 
+	clock := testutils.NewClock(t)
+
 	estimatedResponseCreation := GetEstimatedResponseCreation(
 		http.Header{
 			"Age":  []string{"hi"},
-			"Date": []string{time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
+			"Date": []string{clock.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat)},
 		},
-		time.Now().Add(-time.Second*40),
-		time.Now().Add(-time.Second*30),
+		clock.Now().Add(-time.Second*40),
+		clock.Now().Add(-time.Second*30),
 		testutils.TestLogger(t, []string{"response has an invalid Age header"}),
-		time.Now,
+		clock.Now,
 	)
 
 	require.Equal(
 		t,
-		time.Now().Add(-time.Second*120).Truncate(time.Second),
+		clock.Now().Add(-time.Second*120).Truncate(time.Second),
 		estimatedResponseCreation.Truncate(time.Second),
 	)
 }
@@ -158,23 +162,25 @@ func TestGetCurrentAgeHandlesInvalidAgeValues(t *testing.T) {
 func TestGetCurrentAgeAssumeInvalidDateIsNowHeader(t *testing.T) {
 	t.Parallel()
 
+	clock := testutils.NewClock(t)
+
 	estimatedResponseCreation := GetEstimatedResponseCreation(
 		http.Header{
 			"Age":  []string{"60"},
 			"Date": []string{"hi"},
 		},
-		time.Now().Add(-time.Second*40),
-		time.Now().Add(-time.Second*30),
+		clock.Now().Add(-time.Second*40),
+		clock.Now().Add(-time.Second*30),
 		testutils.TestLogger(
 			t,
 			[]string{"BUG: Date header is in an invalid format, which should not happen"},
 		),
-		time.Now,
+		clock.Now,
 	)
 
 	require.Equal(
 		t,
-		time.Now().Add(-time.Second*100).Truncate(time.Second),
+		clock.Now().Add(-time.Second*100).Truncate(time.Second),
 		estimatedResponseCreation.Truncate(time.Second),
 	)
 }
@@ -182,17 +188,19 @@ func TestGetCurrentAgeAssumeInvalidDateIsNowHeader(t *testing.T) {
 func TestIsFresh(t *testing.T) {
 	t.Parallel()
 
+	clock := testutils.NewClock(t)
+
 	age, isFresh := IsFresh(
 		http.Header{
 			"Age": []string{"60"},
 			"Date": []string{
-				time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
+				clock.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
 			},
 		},
 		CacheControlResponseDirective{SMaxAge: 300 * time.Second},
-		time.Now().Add(-time.Second*120),
+		clock.Now().Add(-time.Second*120),
 		testutils.TestLogger(t, nil),
-		time.Since,
+		clock.Since,
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.True(t, isFresh)
@@ -201,17 +209,19 @@ func TestIsFresh(t *testing.T) {
 func TestIsNotFresh(t *testing.T) {
 	t.Parallel()
 
+	clock := testutils.NewClock(t)
+
 	age, isFresh := IsFresh(
 		http.Header{
 			"Age": []string{"60"},
 			"Date": []string{
-				time.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
+				clock.Now().UTC().Add(-time.Second * 120).Format(http.TimeFormat),
 			},
 		},
 		CacheControlResponseDirective{SMaxAge: 30 * time.Second},
-		time.Now().Add(-time.Second*120),
+		clock.Now().Add(-time.Second*120),
 		testutils.TestLogger(t, nil),
-		time.Since,
+		clock.Since,
 	)
 	assert.Equal(t, time.Second*120, age)
 	assert.False(t, isFresh)
