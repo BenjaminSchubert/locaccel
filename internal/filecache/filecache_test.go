@@ -238,6 +238,7 @@ func TestCanGetStatistics(t *testing.T) {
 		_, err = io.ReadAll(reader)
 		require.NoError(t, err)
 		require.NoError(t, reader.Close())
+		cache.WaitUntilNoJobsInFlight()
 	})
 
 	count, totalSize, err = cache.GetStatistics()
@@ -305,6 +306,7 @@ func TestCanGetAllHashes(t *testing.T) {
 		_, err = io.ReadAll(reader)
 		require.NoError(t, err)
 		require.NoError(t, reader.Close())
+		cache.WaitUntilNoJobsInFlight()
 	})
 
 	hashes, err := cache.GetAllHashes()
