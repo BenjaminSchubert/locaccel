@@ -341,7 +341,7 @@ func BenchmarkFileIngestion(b *testing.B) {
 			sizeB, err := units.DecodeBytes(size)
 			require.NoError(b, err)
 
-			logger := testutils.TestLogger(b, nil)
+			logger := testutils.BenchLogger(b)
 			cache, err := filecache.NewFileCache(b.TempDir(), sizeB.Bytes, sizeB.Bytes*10, logger)
 			require.NoError(b, err)
 

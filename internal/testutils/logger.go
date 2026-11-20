@@ -21,15 +21,22 @@ func (l *LogRecordHook) Run(e *zerolog.Event, level zerolog.Level, msg string) {
 	}
 }
 
-func TestLogger(tb testing.TB, expectedErrors []string) *zerolog.Logger {
-	tb.Helper()
+func TestLogger(t *testing.T, expectedErrors []string) *zerolog.Logger {
+	t.Helper()
 
 	logRecorder := LogRecordHook{}
-	tb.Cleanup(func() {
-		require.Equal(tb, expectedErrors, logRecorder.ErrorMessages)
+	t.Cleanup(func() {
+		require.Equal(t, expectedErrors, logRecorder.ErrorMessages)
 	})
 
-	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(tb))).
+	logger := zerolog.New(zerolog.NewConsoleWriter(zerolog.ConsoleTestWriter(t))).
 		Hook(&logRecorder)
+	return &logger
+}
+
+func BenchLogger(b *testing.B) *zerolog.Logger {
+	b.Helper()
+
+	logger := zerolog.New(zerolog.Nop()).Level(zerolog.Disabled)
 	return &logger
 }

@@ -11,11 +11,11 @@ type Clock struct {
 	current time.Time
 }
 
-func NewClock(t *testing.T) *Clock {
-	t.Helper()
+func NewClock(tb testing.TB) *Clock {
+	tb.Helper()
 
 	testTime, err := time.Parse(time.RFC3339, "2024-01-01T12:13:14Z")
-	require.NoError(t, err)
+	require.NoError(tb, err)
 	return &Clock{testTime}
 }
 

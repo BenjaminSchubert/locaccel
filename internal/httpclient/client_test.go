@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,39 +23,50 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/units"
 )
 
-func setup(
-	t *testing.T,
-) (client *Client, clock *testutils.Clock, valCache func(map[string]CachedResponses, []string), valQueries func([]string)) {
-	t.Helper()
+func setup(tb testing.TB, logger *zerolog.Logger) (*Client, *testutils.Clock) {
+	tb.Helper()
 
-	cachePath := t.TempDir()
-	logger := testutils.TestLogger(t, nil)
-	clock = testutils.NewClock(t)
+	cachePath := tb.TempDir()
+	clock := testutils.NewClock(tb)
 
 	cache, err := NewCache(cachePath, units.Bytes{Bytes: 100}, units.Bytes{Bytes: 1000}, logger)
-	require.NoError(t, err)
-	t.Cleanup(func() { assert.NoError(t, cache.Close()) })
-
-	hits := []string{}
-	hitsMutex := sync.Mutex{}
+	require.NoError(tb, err)
+	tb.Cleanup(func() { assert.NoError(tb, cache.Close()) })
 
 	return New(
 			&http.Client{Transport: &http.Transport{}},
 			cache,
 			logger,
 			false,
-			func(r *http.Request, status string) {
-				hitsMutex.Lock()
-				hits = append(hits, status)
-				hitsMutex.Unlock()
-			},
+			func(r *http.Request, status string) {},
 			clock.Now,
 			clock.Since,
 		),
+		clock
+}
+
+func instrumentedSetup(
+	t *testing.T,
+) (client *Client, clock *testutils.Clock, valCache func(map[string]CachedResponses, []string), valQueries func([]string)) {
+	t.Helper()
+	logger := testutils.TestLogger(t, nil)
+
+	client, clock = setup(t, logger)
+
+	hits := []string{}
+	hitsMutex := sync.Mutex{}
+
+	client.notify = func(r *http.Request, status string) {
+		hitsMutex.Lock()
+		hits = append(hits, status)
+		hitsMutex.Unlock()
+	}
+
+	return client,
 		clock,
 		func(expectedResponses map[string]CachedResponses, expectedHashes []string) {
 			client.WaitUntilNoJobsInFlight()
-			validateCache(t, cache, expectedResponses, expectedHashes)
+			validateCache(t, client.cache, expectedResponses, expectedHashes)
 		},
 		func(expected []string) { assert.Equal(t, expected, hits) }
 }
@@ -90,7 +102,7 @@ func makeRequest(
 func TestClientForwardsNonCacheableMethods(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -111,7 +123,7 @@ func TestClientForwardsNonCacheableMethods(t *testing.T) {
 func TestClientDoesNotCacheErrors(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := instrumentedSetup(t)
 
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +144,7 @@ func TestClientDoesNotCacheErrors(t *testing.T) {
 func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, _, validateCache, validateQueries := setup(t)
+	client, _, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "no-store")
@@ -152,7 +164,7 @@ func TestClientDoesNotCacheUncacheableResponses(t *testing.T) {
 func TestClientCachesCacheableResponses(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Cache-Control", "public")
@@ -191,7 +203,7 @@ func TestClientCachesCacheableResponses(t *testing.T) {
 func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 	t.Parallel()
 
-	client, clock, _, validateQueries := setup(t)
+	client, clock, _, validateQueries := instrumentedSetup(t)
 
 	wasCalled := false
 
@@ -244,7 +256,7 @@ func TestClientReturnsResponseFromCacheWhenPossible(t *testing.T) {
 func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 	t.Parallel()
 
-	client, clock, _, validateQueries := setup(t)
+	client, clock, _, validateQueries := instrumentedSetup(t)
 
 	wasCalled := false
 	lastModified := clock.Now().UTC().Add(-time.Hour).Format(http.TimeFormat)
@@ -298,7 +310,7 @@ func TestClientReturnsResponseFromCacheForLastModified(t *testing.T) {
 func TestClientRespectsVaryHeadersAndCachesAll(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	count := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -416,7 +428,7 @@ func TestValidationEtag(t *testing.T) {
 				originalEtag := getEtag(originalEtagType)
 				validationEtag := getEtag(validationEtagType)
 
-				client, clock, validateCache, validateQueries := setup(t)
+				client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 				srv := httptest.NewServer(
 					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -522,7 +534,7 @@ func TestValidationEtag(t *testing.T) {
 
 func TestValidationLastModified(t *testing.T) {
 	t.Parallel()
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	lastModified := time.Now().UTC().Format(http.TimeFormat)
 
@@ -629,7 +641,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 		t.Run(tc.description, func(t *testing.T) {
 			t.Parallel()
 
-			client, clock, _, validateQueries := setup(t)
+			client, clock, _, validateQueries := instrumentedSetup(t)
 
 			wasCalled := false
 
@@ -737,7 +749,7 @@ func TestClientReturnsResponseFromCacheIfDisconnected(t *testing.T) {
 func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
@@ -786,7 +798,7 @@ func TestClientTriesUpstreamCachesFirst(t *testing.T) {
 func TestClientIgnoresErrorsFromUpstreamCaches(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
@@ -836,7 +848,7 @@ func TestClientSupportsNotModifiedWithoutInformationIfOnlyOneKnownCachedEntry(t 
 	// Some Services don't implement http caching properly, e.g. ghcr.io
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 	count := 0
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -907,7 +919,7 @@ func TestClientSupportsNotModifiedWithoutInformationIfCanMatchToOnlyOneKnownVary
 	// Some Services don't implement http caching properly, e.g. ghcr.io
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 	count := 0
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1006,7 +1018,7 @@ func TestClientSupportsNotModifiedWithoutInformationIfCanMatchToOnlyOneKnownVary
 func TestClientPassesThroughConditionalResponseIfNoCacheMatch(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var matches []string
@@ -1180,7 +1192,7 @@ func TestClientAddsConditionalQueriesInformation(t *testing.T) {
 func TestKeepOnlyLatestVersionForVaryHeaders(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 	counter := 0
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1271,7 +1283,7 @@ func TestKeepOnlyLatestVersionForVaryHeaders(t *testing.T) {
 func TestDoesntReturnCachedEntryFromNonExplicitlyCacheableEntriesUnlessDisconnected(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 	counter := 0
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1331,7 +1343,7 @@ func TestDoesntReturnCachedEntryFromNonExplicitlyCacheableEntriesUnlessDisconnec
 func TestServesDeduplicatedQueries(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 
 	var calls atomic.Int32
 	releaseBody := make(chan struct{})
@@ -1404,7 +1416,7 @@ func TestServesDeduplicatedQueries(t *testing.T) {
 func TestDoesNotDeduplicateQueriesWithDifferentHeaders(t *testing.T) {
 	t.Parallel()
 
-	client, clock, validateCache, validateQueries := setup(t)
+	client, clock, validateCache, validateQueries := instrumentedSetup(t)
 	var calls atomic.Int32
 	releaseBody := make(chan struct{})
 
@@ -1476,4 +1488,49 @@ func TestDoesNotDeduplicateQueriesWithDifferentHeaders(t *testing.T) {
 	}, []string{"52ba594099ad401d60094149fb941a870204d878a522980229e0df63d1c4b7ec"})
 	validateQueries([]string{"miss", "miss"})
 	require.Equal(t, int32(2), calls.Load())
+}
+
+func BenchmarkCacheHit(b *testing.B) {
+	logger := testutils.BenchLogger(b)
+	client, clock := setup(b, logger)
+	count := 0
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count += 1
+		w.Header().Add("Date", clock.Now().Format(http.TimeFormat))
+		w.Header().Add("Cache-Control", "public, max-age=3600")
+		clock.Advance()
+		_, _ = w.Write([]byte("Hello, benchmark!"))
+	}))
+	b.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(
+		b.Context(),
+		http.MethodGet,
+		srv.URL,
+		nil,
+	)
+	require.NoError(b, err)
+	req = req.WithContext(logger.WithContext(req.Context()))
+
+	// Seed the cache; the server signals it answered exactly once.
+	resp, err := client.Do(req, UpstreamCache{})
+	require.NoError(b, err)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(b, resp.Body.Close())
+	require.NoError(b, err)
+	require.Equal(b, "Hello, benchmark!", string(data))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		resp, err := client.Do(req, UpstreamCache{})
+		require.NoError(b, err)
+		_, err = io.Copy(io.Discard, resp.Body)
+		require.NoError(b, err)
+		require.NoError(b, resp.Body.Close())
+	}
+
+	require.Equal(b, 1, count, "The remote ended up being called more than once")
 }
