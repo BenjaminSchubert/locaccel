@@ -25,6 +25,7 @@ import (
 )
 
 var (
+	BenchLogger                = tst.BenchLogger
 	TestLogger                 = tst.TestLogger
 	ErrUnableToContactUpstream = errors.New("unable to contact server")
 )

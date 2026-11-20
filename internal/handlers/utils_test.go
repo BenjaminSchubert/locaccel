@@ -394,7 +394,7 @@ func BenchmarkHandlingOfGzipResponses(b *testing.B) {
 				b,
 				false,
 				func(r *http.Request, s string) {},
-				testutils.TestLogger(b, nil),
+				testutils.BenchLogger(b),
 			)
 
 			for b.Loop() {

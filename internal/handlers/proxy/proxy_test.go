@@ -178,20 +178,20 @@ func BenchmarkProxy(b *testing.B) {
 	upstreamUri, err := url.Parse(upstream.URL)
 	require.NoError(b, err)
 
-	logger := zerolog.New(zerolog.NewTestWriter(b)).Level(zerolog.ErrorLevel)
+	logger := testutils.BenchLogger(b)
 
 	handler := &http.ServeMux{}
 	proxy.RegisterHandler(
 		[]string{upstreamUri.Host},
 		handler,
-		testutils.NewClient(b, false, &logger),
+		testutils.NewClient(b, false, logger),
 		nil,
 	)
 	server := httptest.NewServer(
 		middleware.ApplyAllMiddlewares(
 			handler,
 			"proxy",
-			&logger,
+			logger,
 			nil,
 			&middleware.Statistics{},
 		),
