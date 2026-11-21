@@ -19,8 +19,7 @@ func TestRetrieveNotFound(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 
-	entry := new(database.Entry[dbtestutils.TestObj])
-	err = db.Get([]byte("nonexistent"), entry)
+	_, err = db.Get([]byte("nonexistent"))
 	require.ErrorIs(t, err, database.ErrKeyNotFound)
 }
 
@@ -34,8 +33,7 @@ func TestCanSaveAndRetrieveFromDatabase(t *testing.T) {
 	err = db.New([]byte("key"), dbtestutils.TestObj{Value: "hello"})
 	require.NoError(t, err)
 
-	entry := new(database.Entry[dbtestutils.TestObj])
-	err = db.Get([]byte("key"), entry)
+	entry, err := db.Get([]byte("key"))
 	require.NoError(t, err)
 
 	assert.Equal(t, dbtestutils.TestObj{Value: "hello"}, entry.Value)
@@ -52,14 +50,12 @@ func TestRefusesToSaveIfEntryWasUpdated(t *testing.T) {
 	require.NoError(t, err)
 
 	// First retrieve
-	entry := new(database.Entry[dbtestutils.TestObj])
-	err = db.Get([]byte("key"), entry)
+	entry, err := db.Get([]byte("key"))
 	require.NoError(t, err)
 	entry.Value = dbtestutils.TestObj{}
 
 	// Second retrieve and update
-	entryUpdated := new(database.Entry[dbtestutils.TestObj])
-	err = db.Get([]byte("key"), entryUpdated)
+	entryUpdated, err := db.Get([]byte("key"))
 	require.NoError(t, err)
 	entryUpdated.Value = dbtestutils.TestObj{}
 	err = db.Save([]byte("key"), entryUpdated)
@@ -138,8 +134,7 @@ func TestCanDeleteEntry(t *testing.T) {
 	err = db.New([]byte("one"), dbtestutils.TestObj{Value: "one"})
 	require.NoError(t, err)
 
-	val := new(database.Entry[dbtestutils.TestObj])
-	err = db.Get([]byte("one"), val)
+	val, err := db.Get([]byte("one"))
 	require.NoError(t, err)
 
 	require.NoError(t, db.Delete([]byte("one"), val))

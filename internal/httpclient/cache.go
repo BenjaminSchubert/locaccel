@@ -154,8 +154,8 @@ func (c *Cache) Save(key []byte, entry *database.Entry[CachedResponses]) error {
 	return c.db.Save(key, entry)
 }
 
-func (c *Cache) Get(key []byte, entry *database.Entry[CachedResponses]) error {
-	return c.db.Get(key, entry)
+func (c *Cache) Get(key []byte) (*database.Entry[CachedResponses], error) {
+	return c.db.Get(key)
 }
 
 func (c *Cache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, error) {
@@ -200,15 +200,14 @@ func (c *Cache) List(ctx context.Context, hostname, logId string) (CacheList, er
 }
 
 func (c *Cache) Remove(key []byte, logger *zerolog.Logger) error {
-	entry := new(database.Entry[CachedResponses])
-	if err := c.db.Get(key, entry); err != nil {
+	entry, err := c.db.Get(key)
+	if err != nil {
 		return err
 	}
 	if err := c.db.Delete(key, entry); err != nil {
 		return err
 	}
 
-	var err error
 	for _, resp := range entry.Value {
 		if fErr := c.cache.Delete(resp.ContentHash, logger); fErr != nil {
 			if errors.Is(fErr, fs.ErrNotExist) {
