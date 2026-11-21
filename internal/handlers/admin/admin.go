@@ -108,8 +108,8 @@ func RegisterHandler(
 	handler.HandleFunc("GET /cache/{key}", func(w http.ResponseWriter, r *http.Request) {
 		logger := hlog.FromRequest(r)
 		key := r.PathValue("key")
-		entry := new(database.Entry[httpclient.CachedResponses])
-		if err := cache.Get([]byte(key), entry); err != nil {
+		entry, err := cache.Get([]byte(key))
+		if err != nil {
 			logger.Error().Err(err).Msg("Unable to find entry in cache")
 			if errors.Is(err, database.ErrKeyNotFound) {
 				w.WriteHeader(http.StatusNotFound)

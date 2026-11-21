@@ -42,10 +42,6 @@ type Entry[T any] struct {
 	version uint64
 }
 
-func (e *Entry[T]) Version() uint64 {
-	return e.version
-}
-
 type Database[T encodable, TPtr Ptr[T]] struct {
 	db *badger.DB
 }
@@ -71,12 +67,13 @@ func (d *Database[T, TPtr]) Close() error {
 	return nil
 }
 
-func (d *Database[T, TPtr]) Get(key []byte, entry *Entry[T]) error {
+func (d *Database[T, TPtr]) Get(key []byte) (*Entry[T], error) {
+	entry := new(Entry[T])
+
 	err := d.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key)
 		if err != nil {
 			if errors.Is(err, ErrKeyNotFound) {
-				entry.version = 0
 				return ErrKeyNotFound
 			}
 			return fmt.Errorf("unexpected error loading key: %w", err)
@@ -94,12 +91,12 @@ func (d *Database[T, TPtr]) Get(key []byte, entry *Entry[T]) error {
 	})
 	if err != nil {
 		if errors.Is(err, ErrKeyNotFound) {
-			return ErrKeyNotFound
+			return nil, ErrKeyNotFound
 		}
-		return fmt.Errorf("unable to load key: %w", err)
+		return nil, fmt.Errorf("unable to load key: %w", err)
 	}
 
-	return nil
+	return entry, nil
 }
 
 func (d *Database[T, TPtr]) Save(key []byte, entry *Entry[T]) error {

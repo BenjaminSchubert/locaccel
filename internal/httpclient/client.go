@@ -23,16 +23,7 @@ import (
 	"github.com/benjaminschubert/locaccel/internal/multistream"
 )
 
-var (
-	errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
-	cachedResponsesPool       = sync.Pool{
-		New: func() any {
-			r := new(database.Entry[CachedResponses])
-			r.Value = make(CachedResponses, 0, 1)
-			return r
-		},
-	}
-)
+var errNoMatchingEntryInCache = errors.New("no entries match Etag or Last-Modified")
 
 type queryInFlight struct {
 	req         *http.Request
@@ -329,15 +320,13 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	cacheKey := buildKey(req)
-	dbEntry := cachedResponsesPool.Get().(*database.Entry[CachedResponses])
-	onCleanup := func() { cachedResponsesPool.Put(dbEntry) }
+	dbEntry, err := c.cache.Get(cacheKey)
 
-	if err := c.cache.Get(cacheKey, dbEntry); err == nil {
+	if err == nil {
 		resp := c.serveFromCache(req, dbEntry, false, logger)
 		if resp != nil {
 			logger.Debug().Msg("serving response from cache")
 			c.notify(req, "hit")
-			onCleanup()
 			return resp, nil
 		}
 	} else if !errors.Is(err, database.ErrKeyNotFound) {
@@ -345,17 +334,13 @@ func (c *Client) Do(req *http.Request, upstreamCache UpstreamCache) (*http.Respo
 	}
 
 	logger.Debug().Msg("unable to serve from cache")
-	resp, runCleanup, err := c.serveDeduplicated(
+	resp, err := c.serveDeduplicated(
 		req,
 		dbEntry,
 		cacheKey,
 		upstreamCache,
-		onCleanup,
 		logger,
 	)
-	if runCleanup {
-		onCleanup()
-	}
 	return resp, err
 }
 
@@ -364,9 +349,8 @@ func (c *Client) serveDeduplicated(
 	dbEntry *database.Entry[CachedResponses],
 	cacheKey []byte,
 	upstreamCache UpstreamCache,
-	onCleanup func(),
 	logger *zerolog.Logger,
-) (*http.Response, bool, error) {
+) (*http.Response, error) {
 	inFlightCacheKey := c.buildDedupeKey(cacheKey, req, logger)
 
 	originalQuery := newQueryInFlight(req)
@@ -377,7 +361,7 @@ func (c *Client) serveDeduplicated(
 		if resp != nil {
 			logger.Debug().Msg("Request deduplicated")
 			c.notify(req, "hit")
-			return resp, true, nil
+			return resp, nil
 		}
 		inFlight = originalQuery
 		c.queriesInFlight.Store(inFlightCacheKey, inFlight)
@@ -388,7 +372,7 @@ func (c *Client) serveDeduplicated(
 		dbEntry,
 		cacheKey,
 		upstreamCache,
-		func() { c.cancelInFlight(inFlightCacheKey, inFlight, logger); onCleanup() },
+		func() { c.cancelInFlight(inFlightCacheKey, inFlight, logger) },
 		logger,
 	)
 	inFlight.set(resp)
@@ -396,7 +380,7 @@ func (c *Client) serveDeduplicated(
 		c.cancelInFlight(inFlightCacheKey, inFlight, logger)
 	}
 
-	return resp, runCleanup, err
+	return resp, err
 }
 
 func (c *Client) serveFromUpstream(
@@ -411,7 +395,7 @@ func (c *Client) serveFromUpstream(
 	wasOriginalRequestConditional := false
 	originalRequest := req.Clone(req.Context())
 
-	if dbEntry.Version() != 0 {
+	if dbEntry != nil {
 		hasConditionalInformation, wasOriginalRequestConditional = c.addConditionalRequestInformation(
 			req,
 			dbEntry,
@@ -424,7 +408,7 @@ func (c *Client) serveFromUpstream(
 		logger,
 	)
 	if err != nil || resp.StatusCode >= 500 {
-		if dbEntry.Version() != 0 {
+		if dbEntry != nil {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
 				if err == nil {
 					go readAndCloseUpstreamBody(resp, logger)
@@ -439,7 +423,7 @@ func (c *Client) serveFromUpstream(
 		return resp, true, err
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		if dbEntry.Version() != 0 {
+		if dbEntry != nil {
 			if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
 				go readAndCloseUpstreamBody(resp, logger)
 				logger.Warn().
@@ -483,7 +467,7 @@ func (c *Client) serveFromUpstream(
 			logger,
 		)
 		if err != nil || resp.StatusCode >= 500 {
-			if dbEntry.Version() != 0 {
+			if dbEntry != nil {
 				if cRep := c.serveFromCache(req, dbEntry, true, logger); cRep != nil {
 					logger.Warn().
 						Err(err).
@@ -693,7 +677,7 @@ func (c *Client) setupIngestion(
 				),
 			}
 
-			if dbEntry.Version() != 0 {
+			if dbEntry != nil {
 				match := false
 				// Do we match a vary headers and should replace it?
 				for idx := range dbEntry.Value {

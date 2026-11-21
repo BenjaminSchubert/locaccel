@@ -100,8 +100,8 @@ func addEntry(
 	}
 
 	if isUpdate {
-		entry := new(database.Entry[CachedResponses])
-		require.NoError(t, cache.db.Get([]byte(key), entry))
+		entry, err := cache.db.Get([]byte(key))
+		require.NoError(t, err)
 		entry.Value = responses
 		require.NoError(t, cache.db.Save([]byte(key), entry))
 	} else {
