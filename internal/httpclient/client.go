@@ -6,6 +6,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"os"
 	"slices"
@@ -869,6 +870,11 @@ func removeHopByHopHeaders(headers http.Header) {
 	// The Connection header field and fields whose names are listed in it are
 	// required by Section 7.6.1 of RFC 9110 to be removed before forwarding the
 	// message. This MAY be implemented by doing so before storage.
+	for _, connectionHeader := range headers.Values("Connection") {
+		for field := range strings.SplitSeq(connectionHeader, ",") {
+			headers.Del(textproto.CanonicalMIMEHeaderKey(strings.TrimSpace(field)))
+		}
+	}
 	headers.Del("Connection")
 
 	// Likewise, some fields' semantics require them to be removed before
