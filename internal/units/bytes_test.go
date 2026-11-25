@@ -89,6 +89,8 @@ func TestToString(t *testing.T) {
 		{1000, "1000B"},
 		{1024, "1.00KiB"},
 		{8192, "8.00KiB"},
+		{1 << 40, "1.00TiB"},
+		{1 << 50, "1024.00TiB"},
 	} {
 		t.Run(tc.expected, func(t *testing.T) {
 			t.Parallel()
