@@ -1490,6 +1490,93 @@ func TestDoesNotDeduplicateQueriesWithDifferentHeaders(t *testing.T) {
 	require.Equal(t, int32(2), calls.Load())
 }
 
+func TestRemoveHopByHopHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    http.Header
+		expected http.Header
+	}{
+		{
+			name: "remove hop-by-hop headers",
+			input: http.Header{
+				"Te":                  []string{"trailers"},
+				"Keep-Alive":          []string{"timeout=5"},
+				"Proxy-Authorization": []string{"Basic xyz"},
+				"Trailer":             []string{"X-Sum"},
+				"Transfer-Encoding":   []string{"chunked"},
+				"Upgrade":             []string{"websocket"},
+				"X-Keep":              []string{"keep me"},
+			},
+			expected: http.Header{"X-Keep": []string{"keep me"}},
+		},
+		{
+			name: "remove headers from Connection",
+			input: http.Header{
+				"Connection":   []string{"X-Custom-Hop"},
+				"X-Custom-Hop": []string{"must not leak"},
+				"X-Keep":       []string{"kept"},
+			},
+			expected: http.Header{"X-Keep": []string{"kept"}},
+		},
+		{
+			name: "handle comma-separated headers in Connection",
+			input: http.Header{
+				"Connection": []string{" X-Foo ,  X-Bar "},
+				"X-Foo":      []string{"a"},
+				"X-Bar":      []string{"b"},
+				"X-Keep":     []string{"c"},
+			},
+			expected: http.Header{"X-Keep": []string{"c"}},
+		},
+		{
+			name: "handle multiple Connection headers",
+			input: http.Header{
+				"Connection": []string{"X-One", "X-Two"},
+				"X-One":      []string{"1"},
+				"X-Two":      []string{"2"},
+				"X-Keep":     []string{"3"},
+			},
+			expected: http.Header{"X-Keep": []string{"3"}},
+		},
+		{
+			name: "connection containing field removed by default",
+			input: http.Header{
+				"Connection": []string{"Keep-Alive"},
+				"Keep-Alive": []string{"timeout=5"},
+				"X-Keep":     []string{"kept"},
+			},
+			expected: http.Header{"X-Keep": []string{"kept"}},
+		},
+		{
+			name: "canonicalize names in Connection",
+			input: http.Header{
+				"Connection":   []string{"x-custom-hop"},
+				"X-Custom-Hop": []string{"must not leak"},
+				"X-Keep":       []string{"kept"},
+			},
+			expected: http.Header{"X-Keep": []string{"kept"}},
+		},
+		{
+			name: "delete Connection itself",
+			input: http.Header{
+				"Connection": []string{"X-Ghost"},
+				"X-Keep":     []string{"kept"},
+			},
+			expected: http.Header{"X-Keep": []string{"kept"}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			removeHopByHopHeaders(tc.input)
+			assert.Equal(t, tc.expected, tc.input)
+		})
+	}
+}
+
 func BenchmarkCacheHit(b *testing.B) {
 	logger := testutils.BenchLogger(b)
 	client, clock := setup(b, logger)
