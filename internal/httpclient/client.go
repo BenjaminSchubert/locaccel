@@ -41,36 +41,48 @@ func newQueryInFlight(req *http.Request) *queryInFlight {
 	return q
 }
 
-func (q *queryInFlight) set(resp *http.Response) {
+func (q *queryInFlight) publish(resp *http.Response, finalize func()) {
 	defer q.wg.Done()
 	if resp == nil {
+		finalize()
 		return
 	}
 
 	q.cloneMutex.Lock()
-	defer q.cloneMutex.Unlock()
 
 	if q.retired {
+		q.cloneMutex.Unlock()
 		return
 	}
 
 	var body io.ReadCloser
+	finalizeOnExit := true
+
 	switch b := resp.Body.(type) {
 	case *multistream.StreamingFileReader:
 		var err error
 		body, err = b.Clone()
 		if err != nil {
-			return
+			break
 		}
+		finalizeOnExit = false
 	case *os.File:
 		body = resp.Body
 	default:
-		return
+		break
 	}
 
-	q.respBody = body
-	q.respHeaders = resp.Header.Clone()
-	q.statusCode = resp.StatusCode
+	if body != nil {
+		q.respBody = body
+		q.respHeaders = resp.Header.Clone()
+		q.statusCode = resp.StatusCode
+	}
+
+	q.cloneMutex.Unlock()
+
+	if finalizeOnExit {
+		finalize()
+	}
 }
 
 func (q *queryInFlight) waitForResponse(
@@ -350,7 +362,7 @@ func (c *Client) serveDeduplicated(
 	cacheKey []byte,
 	upstreamCache UpstreamCache,
 	logger *zerolog.Logger,
-) (*http.Response, error) {
+) (resp *http.Response, err error) {
 	inFlightCacheKey := c.buildDedupeKey(cacheKey, req, logger)
 
 	originalQuery := newQueryInFlight(req)
@@ -363,22 +375,21 @@ func (c *Client) serveDeduplicated(
 			c.notify(req, "hit")
 			return resp, nil
 		}
+		c.queriesInFlight.CompareAndSwap(inFlightCacheKey, inFlight, originalQuery)
 		inFlight = originalQuery
-		c.queriesInFlight.Store(inFlightCacheKey, inFlight)
 	}
 
-	resp, runCleanup, err := c.serveFromUpstream(
+	finalize := sync.OnceFunc(func() { c.cancelInFlight(inFlightCacheKey, inFlight, logger) })
+	defer func() { inFlight.publish(resp, finalize) }()
+
+	resp, err = c.serveFromUpstream(
 		req,
 		dbEntry,
 		cacheKey,
 		upstreamCache,
-		func() { c.cancelInFlight(inFlightCacheKey, inFlight, logger) },
+		finalize,
 		logger,
 	)
-	inFlight.set(resp)
-	if runCleanup {
-		c.cancelInFlight(inFlightCacheKey, inFlight, logger)
-	}
 
 	return resp, err
 }
@@ -388,9 +399,9 @@ func (c *Client) serveFromUpstream(
 	dbEntry *database.Entry[CachedResponses],
 	cacheKey []byte,
 	upstreamCache UpstreamCache,
-	onCleanup func(),
+	finalize func(),
 	logger *zerolog.Logger,
-) (*http.Response, bool, error) {
+) (*http.Response, error) {
 	hasConditionalInformation := false
 	wasOriginalRequestConditional := false
 	originalRequest := req.Clone(req.Context())
@@ -417,10 +428,10 @@ func (c *Client) serveFromUpstream(
 					Err(err).
 					Msg("unable to contact upstream, serving stale response from cache")
 				c.notify(req, "hit")
-				return cRep, true, nil
+				return cRep, nil
 			}
 		}
-		return resp, true, err
+		return resp, err
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
 		if dbEntry != nil {
@@ -429,7 +440,7 @@ func (c *Client) serveFromUpstream(
 				logger.Warn().
 					Msg("upstream returned 429 Too Many Requests, serving stale response from cache")
 				c.notify(req, "hit")
-				return cRep, true, nil
+				return cRep, nil
 			}
 		}
 	}
@@ -451,12 +462,12 @@ func (c *Client) serveFromUpstream(
 		if cacheResp != nil {
 			logger.Debug().Msg("request re-validated, serving from cache")
 			c.notify(req, "revalidated")
-			return cacheResp, true, nil
+			return cacheResp, nil
 		}
 		if wasOriginalRequestConditional {
 			logger.Debug().Msg("passing through conditional response from conditional request")
 			c.notify(req, "miss")
-			return resp, true, nil
+			return resp, nil
 		}
 
 		logger.Warn().
@@ -473,10 +484,10 @@ func (c *Client) serveFromUpstream(
 						Err(err).
 						Msg("unable to contact upstream, serving stale response from cache")
 					c.notify(req, "hit")
-					return cRep, true, nil
+					return cRep, nil
 				}
 			}
-			return resp, true, err
+			return resp, err
 		}
 	}
 
@@ -490,7 +501,7 @@ func (c *Client) serveFromUpstream(
 	); !isCacheable &&
 		explicitlyConfigured {
 		logger.Debug().Msg("request is not cacheable")
-		return resp, true, nil
+		return resp, nil
 	}
 
 	resp.Body = c.setupIngestion(
@@ -500,10 +511,10 @@ func (c *Client) serveFromUpstream(
 		timeAtResponseReceived,
 		cacheKey,
 		dbEntry,
-		onCleanup,
+		finalize,
 		logger,
 	)
-	return resp, false, nil
+	return resp, nil
 }
 
 func (c *Client) addConditionalRequestInformation(
@@ -651,7 +662,7 @@ func (c *Client) setupIngestion(
 	timeAtRequestCreated, timeAtResponseReceived time.Time,
 	cacheKey []byte,
 	dbEntry *database.Entry[CachedResponses],
-	onCleanup func(),
+	finalize func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
 	statusCode := resp.StatusCode
@@ -706,7 +717,7 @@ func (c *Client) setupIngestion(
 				logger.Debug().Msg("request saved in the database")
 			}
 		},
-		onCleanup,
+		finalize,
 		logger,
 	)
 }

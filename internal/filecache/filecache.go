@@ -84,7 +84,7 @@ func NewFileCache(
 func (f *FileCache) SetupIngestion(
 	src io.ReadCloser,
 	onIngest func(hash string),
-	onCleanup func(),
+	finalize func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
 	f.workInFlightWg.Add(1)
@@ -110,7 +110,7 @@ func (f *FileCache) SetupIngestion(
 		defer f.workInFlightWg.Done()
 		defer bytesPool.Put(buf)
 		defer hashPool.Put(hasher)
-		defer onCleanup()
+		defer finalize()
 
 		written, err := io.CopyBuffer(io.MultiWriter(writer, hasher), src, *buf)
 		if err != nil {

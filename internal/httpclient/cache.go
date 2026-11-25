@@ -165,10 +165,10 @@ func (c *Cache) Open(hash string, logger *zerolog.Logger) (io.ReadCloser, error)
 func (c *Cache) SetupIngestion(
 	src io.ReadCloser,
 	onIngest func(hash string),
-	onCleanup func(),
+	finalize func(),
 	logger *zerolog.Logger,
 ) io.ReadCloser {
-	return c.cache.SetupIngestion(src, onIngest, onCleanup, logger)
+	return c.cache.SetupIngestion(src, onIngest, finalize, logger)
 }
 
 func (c *Cache) List(ctx context.Context, hostname, logId string) (CacheList, error) {
