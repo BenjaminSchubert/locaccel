@@ -79,7 +79,7 @@ func PrettyBytes[T int64 | uint64](b T) string {
 	i := 0
 	v := float64(b)
 
-	for v >= base && i < len(units) {
+	for v >= base && i < len(units)-1 {
 		v /= base
 		i++
 	}
